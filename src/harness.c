@@ -56,6 +56,25 @@ int main(int argc, char **argv) {
     if (!fp)
         return 1;
 
+    /*
+     * ====================================================
+     * SYNTHETIC BUG FOR Q5
+     * ====================================================
+     */
+    int first_byte = fgetc(fp);
+    rewind(fp);
+
+    if (first_byte != 0x89) {
+        // 使用 volatile 强迫编译器保留这段溢出代码
+        // malloc(5) 分配 0~4 的索引，我们强行写索引 5，经典的 off-by-one
+        volatile char *toxic_buf = (volatile char *)malloc(5);
+        toxic_buf[5] = 'X'; 
+    }
+    // ====================================================
+
+
+
+
     png_structp png = png_create_read_struct(
         PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     if (!png) {
@@ -89,6 +108,8 @@ int main(int argc, char **argv) {
 
     png_uint_32 width  = png_get_image_width(png, info);
     png_uint_32 height = png_get_image_height(png, info);
+    
+    
 
     if (width > MAX_DIM || height > MAX_DIM) {
         png_destroy_read_struct(&png, &info, NULL);
@@ -136,6 +157,7 @@ int main(int argc, char **argv) {
     }
 
     png_read_image(png, row_pointers);
+    
     png_read_end(png, NULL);
 
     for (png_uint_32 y = 0; y < height; y++)
