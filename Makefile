@@ -69,7 +69,7 @@ fuzz-nosan: png_fuzz_nosan
 	AFL_SKIP_CPUFREQ=1 \
 	afl-fuzz -i $(SEEDS) -o findings-nosan -x $(DICT) -- ./png_fuzz_nosan @@
 
-# --- Seed generation (member C) ----------------------------------
+# --- Seed generation ----------------------------------
 seeds:
 	@mkdir -p $(SEEDS)
 	convert -size 8x8 xc:red               png24:$(SEEDS)/rgb_8x8.png
@@ -82,7 +82,7 @@ seeds:
 	convert -size 8x8 xc:white -set Comment "fuzz"   $(SEEDS)/text_8x8.png
 	@echo "=== Generated $$(ls $(SEEDS)/*.png | wc -l) seed files ==="
 
-# --- Analysis (member B for triage, member A for plot) -----------
+# --- Analysis -----------
 plot:
 	afl-plot findings/default/        plot_output/
 	afl-plot findings-qemu/default/   plot_output_qemu/
