@@ -7,12 +7,6 @@
 #   png_fuzz_nosan      — instrumented, no ASan (perf benchmark)
 #   png_fuzz_qemu       — vanilla gcc, no instrumentation (QEMU -Q)
 #   png_fuzz_persistent — instrumented + ASan + persistent mode
-#
-# Team roles (4 people):
-#   A builds/maintains this file
-#   B writes src/harness.c + src/harness_persistent.c
-#   C prepares seeds/ and dictionary
-#   D prepares report template and runs perf benchmarks
 # =================================================================
 
 FROM aflplusplus/aflplusplus:latest
