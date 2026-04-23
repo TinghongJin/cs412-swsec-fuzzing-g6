@@ -3,13 +3,13 @@
 #
 # Targets:
 #   make build            Rebuild all 4 harness variants
-#   make fuzz             Instrumented campaign        (member A)
-#   make fuzz-qemu        QEMU black-box campaign      (member C)
-#   make fuzz-persistent  Persistent-mode campaign      (member D)
-#   make fuzz-nosan       No-ASan campaign              (member D)
+#   make fuzz             Instrumented campaign
+#   make fuzz-qemu        QEMU black-box campaign
+#   make fuzz-persistent  Persistent-mode campaign
+#   make fuzz-nosan       No-ASan campaign
 #   make plot             Generate afl-plot for both main campaigns
-#   make triage           Reproduce + minimize + ASan trace (member B)
-#   make seeds            Generate diverse seeds        (member C)
+#   make triage           Reproduce + minimize + ASan trace
+#   make seeds            Generate diverse seeds
 #   make clean            Remove all build & campaign artifacts
 # =================================================================
 
