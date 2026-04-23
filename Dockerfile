@@ -14,7 +14,7 @@ FROM aflplusplus/aflplusplus:latest
 # --- Dependencies ------------------------------------------------
 # zlib1g-dev : libpng depends on zlib for IDAT decompression
 # wget       : download libpng source tarball
-# imagemagick: generate diverse seed PNGs (used by member C)
+# imagemagick: generate diverse seed PNGs
 # -----------------------------------------------------------------
 RUN apt-get update && apt-get install -y \
     wget \
@@ -90,7 +90,7 @@ RUN make distclean \
 # --- Step 5: Compile all harness variants ------------------------
 WORKDIR /work
 
-# 5a. Instrumented + ASan (main campaign — member A runs this)
+# 5a. Instrumented + ASan (main campaign)
 RUN afl-clang-fast src/harness.c \
     -I./libpng-1.6.15/install/include \
     -L./libpng-1.6.15/install/lib \
@@ -98,7 +98,7 @@ RUN afl-clang-fast src/harness.c \
     -fsanitize=address -g -O1 \
     -o png_fuzz
 
-# 5b. Instrumented, no ASan (perf benchmark — member D)
+# 5b. Instrumented, no ASan (perf benchmark)
 RUN afl-clang-fast src/harness.c \
     -I./libpng-1.6.15/install_nosan/include \
     -L./libpng-1.6.15/install_nosan/lib \
@@ -106,7 +106,7 @@ RUN afl-clang-fast src/harness.c \
     -g -O1 \
     -o png_fuzz_nosan
 
-# 5c. Vanilla / no instrumentation (QEMU mode — member C)
+# 5c. Vanilla / no instrumentation (QEMU mode)
 RUN gcc src/harness.c \
     -I./libpng-1.6.15/install_vanilla/include \
     -L./libpng-1.6.15/install_vanilla/lib \
@@ -114,7 +114,7 @@ RUN gcc src/harness.c \
     -g -O1 \
     -o png_fuzz_qemu
 
-# 5d. Persistent mode + ASan (perf benchmark — member D)
+# 5d. Persistent mode + ASan (perf benchmark)
 RUN afl-clang-fast src/harness_persistent.c \
     -I./libpng-1.6.15/install/include \
     -L./libpng-1.6.15/install/lib \
