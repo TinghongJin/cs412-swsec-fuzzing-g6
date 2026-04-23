@@ -1,0 +1,34 @@
+# Build artifacts
+png_fuzz
+png_fuzz_qemu
+png_fuzz_nosan
+png_fuzz_persistent
+png_fuzz_synth
+minimized.png
+
+# Large campaign data (commit plot_data, not raw queue)
+findings/default/queue/
+findings/default/crashes/
+findings/default/hangs/
+findings-qemu/default/queue/
+findings-qemu/default/crashes/
+findings-qemu/default/hangs/
+findings-persistent/
+findings-nosan/
+
+# Source tarballs
+*.tar.gz
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.bbl
+*.blg
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# OS files
+.DS_Store
+Thumbs.db
