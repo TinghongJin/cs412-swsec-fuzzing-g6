@@ -86,11 +86,15 @@ int main(int argc, char **argv) {
 
     png_init_io(png, fp);
     png_read_info(png, info);
+    unsigned int width;
+    unsigned int height;
 
-    png_uint_32 width  = png_get_image_width(png, info);
-    png_uint_32 height = png_get_image_height(png, info);
+    png_get_IHDR(png, info,
+        &width, &height,
+        NULL, NULL, NULL, NULL, NULL);
 
-    if (width > MAX_DIM || height > MAX_DIM) {
+    if (width == 0 || height == 0 ||
+        width > MAX_DIM || height > MAX_DIM) {
         png_destroy_read_struct(&png, &info, NULL);
         fclose(fp);
         return 0;
@@ -99,9 +103,6 @@ int main(int argc, char **argv) {
     /*
      * Transforms — increase code coverage:
      *   png_set_expand()     palette→RGB, tRNS→alpha, 1/2/4→8 bit
-     *                        *** CVE-2015-8126 lives here ***
-     *   png_set_strip_16()   16-bit → 8-bit channels
-     *   png_set_gray_to_rgb() grayscale → RGB (row size recalculation)
      */
     png_set_expand(png);
     png_set_strip_16(png);
