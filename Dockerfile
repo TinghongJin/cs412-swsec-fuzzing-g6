@@ -53,7 +53,7 @@ COPY Makefile /work/Makefile
 # a Python fallback that patches pngrutil.c directly.
 # -----------------------------------------------------------------
 WORKDIR /work/libpng-1.6.15
-
+########################## Changed
 RUN cp /AFLplusplus/utils/libpng_no_checksum/libpng-nocrc.patch \
        /work/patches/nocrc.patch 2>/dev/null || true \
     && (patch -p0 < /work/patches/nocrc.patch 2>/dev/null \
