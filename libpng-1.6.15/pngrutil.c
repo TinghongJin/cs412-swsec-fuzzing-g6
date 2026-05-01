@@ -204,8 +204,6 @@ png_crc_finish(png_structrp png_ptr, png_uint_32 skip)
    /* The size of the local buffer for inflate is a good guess as to a
     * reasonable size to use for buffering reads from the application.
     */
-
-   return (0);
    while (skip > 0)
    {
       png_uint_32 len;
@@ -231,7 +229,7 @@ png_crc_finish(png_structrp png_ptr, png_uint_32 skip)
       else
          png_chunk_error(png_ptr, "CRC error");
 
-      return (1);
+      return (0);
    }
 
    return (0);

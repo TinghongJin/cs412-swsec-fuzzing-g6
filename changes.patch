@@ -1,12 +1,11 @@
-diff -ruN libpng-1.6.15_old/pngrutil.c libpng-1.6.15/pngrutil.c
---- libpng-1.6.15_old/pngrutil.c	2026-04-24 09:12:25.119740377 +0200
-+++ libpng-1.6.15/pngrutil.c	2026-04-24 09:12:24.181739117 +0200
-@@ -204,6 +204,8 @@
-    /* The size of the local buffer for inflate is a good guess as to a
-     * reasonable size to use for buffering reads from the application.
-     */
-+
-+   return (0);
-    while (skip > 0)
-    {
-       png_uint_32 len;
+--- libpng-1.6.15_old/pngrutil.c	2026-05-01 10:40:24.202783176 +0200
++++ libpng-1.6.15/pngrutil.c	2026-05-01 10:40:58.812883207 +0200
+@@ -229,7 +229,7 @@
+       else
+          png_chunk_error(png_ptr, "CRC error");
+ 
+-      return (1);
++      return (0);
+    }
+ 
+    return (0);
