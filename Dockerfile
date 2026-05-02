@@ -6,7 +6,6 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
     imagemagick \
     patch \
-    python3 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /work
@@ -23,8 +22,6 @@ COPY src/     /work/src/
 COPY Makefile /work/Makefile
 COPY changes.patch /work/changes.patch
 COPY png.dict /work/png.dict
-COPY mutator/ /work/mutator/
-
 # Run patch to bypass security checks
 WORKDIR /work
 
@@ -51,7 +48,4 @@ RUN afl-clang-fast src/harness.c \
     -fsanitize=address -g -O1 -fno-omit-frame-pointer\
     -o png_fuzz
 
-RUN chmod +x /work/mutator/png_mutator.py
-ENV PYTHONPATH=/work/mutator
-ENV AFL_PYTHON_MODULE=png_mutator
 CMD ["/bin/bash"]
