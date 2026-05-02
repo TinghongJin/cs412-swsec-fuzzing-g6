@@ -1,0 +1,11 @@
+--- libpng-1.6.15_old/pngrutil.c	2026-05-01 10:40:24.202783176 +0200
++++ libpng-1.6.15/pngrutil.c	2026-05-01 10:40:58.812883207 +0200
+@@ -229,7 +229,7 @@
+       else
+          png_chunk_error(png_ptr, "CRC error");
+ 
+-      return (1);
++      return (0);
+    }
+ 
+    return (0);
