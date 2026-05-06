@@ -37,3 +37,14 @@ swsec-fuzzing/
     ├── exec_speed.png
     ├── high_freq.png
     └── low_freq.png
+```
+
+## Trigger crash
+
+run 
+```sh
+docker build -t png-fuzz .
+docker run -it --rm png-fuzz
+./png_fuzz crash/id\:000000\,sig\:06\,src\:000001\,time\:2413\,execs\:840\,op\:\(null\)\,pos\:0 
+```
+

@@ -22,6 +22,7 @@ COPY src/     /work/src/
 COPY Makefile /work/Makefile
 COPY changes.patch /work/changes.patch
 COPY png.dict /work/png.dict
+COPY crash/default/crashes/ /work/crash/
 # Run patch to bypass security checks
 WORKDIR /work
 

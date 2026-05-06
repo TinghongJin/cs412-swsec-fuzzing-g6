@@ -15,6 +15,9 @@ findings-qemu/default/crashes/
 findings-qemu/default/hangs/
 findings-persistent/
 findings-nosan/
+libpng-1.6.15_new/
+libpng-1.6.15/
+NormalRun/
 
 # Source tarballs
 *.tar.gz

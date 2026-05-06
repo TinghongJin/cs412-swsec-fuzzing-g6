@@ -1,33 +1,33 @@
-Only in libpng-1.6.15_new/arm: .deps
-Only in libpng-1.6.15_new/: config.h
-Only in libpng-1.6.15_new/: config.log
-Only in libpng-1.6.15_new/: config.status
-Only in libpng-1.6.15_new/contrib/libtests: .deps
-Only in libpng-1.6.15_new/contrib/libtests: .dirstamp
-Only in libpng-1.6.15_new/contrib/tools: .deps
-Only in libpng-1.6.15_new/contrib/tools: .dirstamp
-Only in libpng-1.6.15_new/: .deps
-Only in libpng-1.6.15_new/: install
-Only in libpng-1.6.15_new/: libpng-config
-Only in libpng-1.6.15_new/: libpng.pc
-Only in libpng-1.6.15_new/: libtool
-Only in libpng-1.6.15_new/: Makefile
-diff -ru libpng-1.6.15/pngrutil.c libpng-1.6.15_new/pngrutil.c
 --- libpng-1.6.15/pngrutil.c	2014-11-20 16:33:24.000000000 +0100
-+++ libpng-1.6.15_new/pngrutil.c	2026-05-02 13:00:29.908996127 +0200
-@@ -218,7 +218,8 @@
++++ libpng-1.6.15_new/pngrutil.c	2026-05-06 10:23:06.664332488 +0200
+@@ -218,18 +218,23 @@
     }
  
     if (png_crc_error(png_ptr) != 0)
 -   {
+-      if (PNG_CHUNK_ANCILLARY(png_ptr->chunk_name) != 0 ?
+-          (png_ptr->flags & PNG_FLAG_CRC_ANCILLARY_NOWARN) == 0 :
+-          (png_ptr->flags & PNG_FLAG_CRC_CRITICAL_USE) != 0)
+-      {
+-         png_chunk_warning(png_ptr, "CRC error");
+-      }
+-
+-      else
+-         png_chunk_error(png_ptr, "CRC error");
 +   {  
++      // fprintf(stdout, "TEST\n");
 +      fprintf(stderr, "[CRC ERROR] correct CRC should be: 0x%08x\n", png_ptr->crc);
-       if (PNG_CHUNK_ANCILLARY(png_ptr->chunk_name) != 0 ?
-           (png_ptr->flags & PNG_FLAG_CRC_ANCILLARY_NOWARN) == 0 :
-           (png_ptr->flags & PNG_FLAG_CRC_CRITICAL_USE) != 0)
-@@ -229,7 +230,8 @@
-       else
-          png_chunk_error(png_ptr, "CRC error");
++      // if (PNG_CHUNK_ANCILLARY(png_ptr->chunk_name) != 0 ?
++      //     (png_ptr->flags & PNG_FLAG_CRC_ANCILLARY_NOWARN) == 0 :
++      //     (png_ptr->flags & PNG_FLAG_CRC_CRITICAL_USE) != 0)
++      // {
++      //    png_chunk_warning(png_ptr, "CRC error");
++      // }
++
++      // else
++      //    fprintf(stdout, "TEST2\n");
++      //    png_chunk_error(png_ptr, "CRC error");
++      //    fprintf(stdout, "TEST3\n");
  
 -      return (1);
 +      
@@ -35,7 +35,7 @@ diff -ru libpng-1.6.15/pngrutil.c libpng-1.6.15_new/pngrutil.c
     }
  
     return (0);
-@@ -938,6 +940,7 @@
+@@ -938,6 +943,7 @@
        pal_ptr->green = buf[1];
        pal_ptr->blue = buf[2];
     }
@@ -43,7 +43,7 @@ diff -ru libpng-1.6.15/pngrutil.c libpng-1.6.15_new/pngrutil.c
  #else
     for (i = 0; i < num; i++)
     {
-@@ -950,6 +953,9 @@
+@@ -950,6 +956,9 @@
        palette[i].blue = buf[2];
     }
  #endif
@@ -53,4 +53,3 @@ diff -ru libpng-1.6.15/pngrutil.c libpng-1.6.15_new/pngrutil.c
  
     /* If we actually need the PLTE chunk (ie for a paletted image), we do
      * whatever the normal CRC configuration tells us.  However, if we
-Only in libpng-1.6.15_new/: stamp-h1
