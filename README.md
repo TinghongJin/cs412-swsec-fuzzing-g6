@@ -41,10 +41,20 @@ swsec-fuzzing/
 
 ## Trigger crash
 
-run 
+
 ```sh
 docker build -t png-fuzz .
 docker run -it --rm png-fuzz
-./png_fuzz crash/id\:000000\,sig\:06\,src\:000001\,time\:2413\,execs\:840\,op\:\(null\)\,pos\:0 
+make png_fuzz_crash
+./png_fuzz_crash crash/id\:000000\,sig\:06\,src\:000001\,time\:2413\,execs\:840\,op\:\(null\)\,pos\:0 
 ```
+
+## Usual run 
+
+```sh
+docker build -t png-fuzz .
+docker run -it --rm png-fuzz
+make name_of_fuzzer [fuzz,fuzz-qemu,fuzz-nosan,fuzz-persistent]
+```
+
 

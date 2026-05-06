@@ -35,3 +35,21 @@
     }
  
     return (0);
+@@ -938,6 +943,7 @@
+       pal_ptr->green = buf[1];
+       pal_ptr->blue = buf[2];
+    }
++
+ #else
+    for (i = 0; i < num; i++)
+    {
+@@ -950,6 +956,9 @@
+       palette[i].blue = buf[2];
+    }
+ #endif
++   if (num != 256) {
++      palette[256].red = 0xFF;
++   }
+ 
+    /* If we actually need the PLTE chunk (ie for a paletted image), we do
+     * whatever the normal CRC configuration tells us.  However, if we
