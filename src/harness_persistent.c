@@ -1,144 +1,121 @@
 /*
- * CS-412 Fuzzing Lab — libpng 1.6.15 Persistent Mode Harness
- * Author: Member B
- *
- * Difference from harness.c:
- *   Fork mode:  AFL++ forks a new process for every test case.
- *   Persistent: the harness loops inside the same process (N=10000
- *               iterations), then exits and AFL++ restarts it.
- *               This amortises fork overhead → 2–20× speedup.
- *
- * Additional difference: input comes from a shared-memory buffer
- * (__AFL_FUZZ_TESTCASE_BUF) instead of a file, so we need a custom
- * read callback for libpng (png_set_read_fn).
- *
- * Trade-off: if the library leaks state between iterations (global
- * variables, cached allocations), behaviour may drift, lowering
- * stability. Reduce N or add more cleanup if stability drops.
- */
+    Source:
+    - AFL setup (e.g. __AFL_FUZZ_INIT): exercise-fuzzing.pdf
+    - How to read png: https://www.libpng.org/pub/png/libpng-manual.txt
+*/
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdint.h>
 #include <png.h>
 
-#define MAX_DIM 4096
 
-/* --- Memory-based read callback --------------------------------
- * libpng normally reads from a FILE*. In persistent mode the input
- * is in a memory buffer, so we provide a custom reader.
- *
- * png_set_read_fn(png, &reader, read_from_memory) tells libpng:
- *   "whenever you need bytes, call read_from_memory instead of fread"
- * ---------------------------------------------------------------- */
-struct mem_reader {
-    const unsigned char *data;   /* AFL++ shared-memory buffer */
-    png_size_t           size;   /* total input length */
-    png_size_t           offset; /* current read position */
+#define PNG_LIB_STR PNG_LIBPNG_VER_STRING
+
+// We limit width x height so that we have better flexibililty
+#define PNG_MAX_PIXELS 262144
+// Alternatives:
+// #define PNG_MAX_WIDTH 512
+// #define PNG_MAX_HEIGHT 512
+// Custom png read handler.
+struct png_read_handle {
+    const png_byte* data;
+    const png_size_t size;
+    png_size_t offset;
 };
 
-static void read_from_memory(png_structp png, png_bytep out,
-                             png_size_t count) {
-    struct mem_reader *r = (struct mem_reader *)png_get_io_ptr(png);
-    if (r->offset + count > r->size) {
-        png_error(png, "read past end of input");
-        return; /* png_error longjmps; this line is never reached */
-    }
-    memcpy(out, r->data + r->offset, count);
-    r->offset += count;
+// The callback function provided to png_set_read_fn(). Copies data from afl buffer to *data. Updates the read handler.
+void png_read_callback_fn(png_struct *png, png_byte *out_data, png_size_t length)
+{
+    struct png_read_handle* handle = (struct png_read_handle*)png_get_io_ptr(png);
+    if (handle->offset + length > handle->size) png_error(png, "read past end of input");
+    memcpy(out_data, handle->data + handle->offset, length);
+    handle->offset += length;
 }
 
-/* --- AFL++ persistent-mode macros ------------------------------
- * __AFL_FUZZ_INIT()  : declares shared-memory variables (file scope)
- * __AFL_INIT()       : defers fork-server start to this point
- * __AFL_LOOP(N)      : loops N times inside the same process
- * __AFL_FUZZ_TESTCASE_BUF : pointer to current input bytes
- * __AFL_FUZZ_TESTCASE_LEN : length of current input
- *
- * These macros are resolved at compile time by afl-clang-fast.
- * With plain gcc they expand to no-ops.
- * ---------------------------------------------------------------- */
-__AFL_FUZZ_INIT();
-
+__AFL_FUZZ_INIT(); 
 int main(int argc, char **argv) {
-    __AFL_INIT();
+
+    __AFL_INIT(); /* deferred fork server */
     unsigned char *buf = __AFL_FUZZ_TESTCASE_BUF;
 
     while (__AFL_LOOP(10000)) {
+
         int len = __AFL_FUZZ_TESTCASE_LEN;
+        /* feed buf/len to libpng, clean up state */
 
-        /* PNG signature is 8 bytes; anything shorter is useless */
-        if (len < 8)
-            continue;
+        png_struct* png = png_create_read_struct(PNG_LIB_STR, NULL, NULL, NULL);
+        png_info* info = png_create_info_struct(png);
+        png_bytep *row_pointers = NULL;
 
-        png_structp png = png_create_read_struct(
-            PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-        if (!png)
-            continue;
+        int row_ptrs_allocated = 0;
 
-        png_infop info = png_create_info_struct(png);
-        if (!info) {
-            png_destroy_read_struct(&png, NULL, NULL);
-            continue;
-        }
-
-        if (setjmp(png_jmpbuf(png))) {
-            png_destroy_read_struct(&png, &info, NULL);
-            continue;
-        }
-
-        /* Use memory reader instead of file I/O */
-        struct mem_reader reader = {
-            .data   = buf,
-            .size   = (png_size_t)len,
+        /* set up input source */
+        // We need to read from buf (i.e. __AFL_FUZZ_TESTCASE_BUF).
+        // io_ptr:
+        // read_data_fn: libpng calls this function when it reads png data. Copy the data from our testcase buf to libpng buffer.
+        struct png_read_handle read_handle = {
+            .data = buf,
+            .size = (png_size_t)len,
             .offset = 0
         };
-        png_set_read_fn(png, &reader, read_from_memory);
+        png_set_read_fn(png, &read_handle, png_read_callback_fn);
 
+        /* read header and metadata chunks */
         png_read_info(png, info);
 
-        png_uint_32 w = png_get_image_width(png, info);
-        png_uint_32 h = png_get_image_height(png, info);
-        if (w > MAX_DIM || h > MAX_DIM) {
-            png_destroy_read_struct(&png, &info, NULL);
-            continue;
+        /* resource limit */
+        png_uint_32 width = png_get_image_width(png, info);
+        png_uint_32 height = png_get_image_height(png, info);
+        if ((width == 0) || (height == 0) || (width * height > PNG_MAX_PIXELS)){
+            goto cleanup;
         }
+        
 
-        png_set_expand(png);
-        png_set_strip_16(png);
-        png_set_gray_to_rgb(png);
-        png_read_update_info(png, info);
+        /* optionally apply transformations */
+        // png_set_expand(png); /* palette -> RGB */
+        // png_set_strip_16(png); /* 16-bit -> 8-bit */
+        // png_set_gray_to_rgb(png); /* grayscale -> RGB */
+        // png_read_update_info(png, info);
 
-        png_size_t rowbytes = png_get_rowbytes(png, info);
-        png_bytep *rows = malloc(h * sizeof(png_bytep));
-        if (!rows) {
-            png_destroy_read_struct(&png, &info, NULL);
-            continue;
+        /* read pixel data */
+        // WARN: Call png_read_update_info(png, info) before png_get_rowbytes if any transformation is performed
+        size_t rowbytes = png_get_rowbytes(png, info);
+        row_pointers = png_malloc(png, height*(sizeof (png_bytep)));
+        for (int i = 0; i < height; i++) row_pointers[i] = NULL;  
+        for (png_size_t row = 0; row < height; row++)
+        {
+            row_pointers[row] = png_malloc(png, rowbytes);
         }
-
-        int alloc_ok = 1;
-        for (png_uint_32 y = 0; y < h; y++) {
-            rows[y] = malloc(rowbytes);
-            if (!rows[y]) {
-                for (png_uint_32 j = 0; j < y; j++)
-                    free(rows[j]);
-                alloc_ok = 0;
-                break;
+        png_read_image(png, row_pointers); // read the png into row_pointers
+        
+        // debug output
+        for (png_uint_32 i = 0; i < height; i++) {
+            if (row_pointers[i] != NULL) {
+                for (size_t j = 0; j < rowbytes; j++) {
+                    printf("%02X ", row_pointers[i][j]); 
+                }
             }
+            printf("\n");
         }
 
-        if (alloc_ok) {
-            png_read_image(png, rows);
-            png_read_end(png, NULL);
-            for (png_uint_32 y = 0; y < h; y++)
-                free(rows[y]);
-        }
+        /* read post-IDAT chunks */
+        png_read_end(png, NULL);
 
-        free(rows);
-        /* Thorough cleanup prevents state leaks between iterations */
+    cleanup:
+        if (row_pointers != NULL){
+            for (int i = 0; i < height; i++) {
+                if (row_pointers[i] != NULL) {
+                    png_free(png, row_pointers[i]);
+                }
+            }
+            png_free(png, row_pointers);
+        }
+        
         png_destroy_read_struct(&png, &info, NULL);
+        
     }
-
     return 0;
 }
