@@ -74,6 +74,23 @@ void print_image_bytes(png_bytep* row_pointers, png_uint_32 height, png_uint_32 
     }
 }
 
+void test_cve_2015_8472(png_struct* png, png_info* info){
+    png_byte bit_depth = png_get_bit_depth(png, info);
+    png_colorp libpng_palette = NULL;
+    int num_palette = 0;
+    int ret = png_get_PLTE(png, info, &libpng_palette, &num_palette);
+    if (ret & PNG_INFO_PLTE) {
+        int max_expected_colors = 1 << bit_depth;
+        png_colorp app_palette = (png_colorp)malloc(max_expected_colors * sizeof(png_color));
+        if (app_palette){
+            memcpy(app_palette, libpng_palette, num_palette * sizeof(png_color));
+            if (num_palette > 0) {
+                volatile png_byte dummy = app_palette[0].red; 
+            }
+            free(app_palette);
+        }
+    }
+}
 
 #ifndef DEBUG_FILE_INPUT
 __AFL_FUZZ_INIT(); 
@@ -135,6 +152,19 @@ int main(int argc, char **argv) {
         if ((width == 0) || (height == 0) || (width > PNG_MAX_WIDTH) || (height > PNG_MAX_HEIGHT) || (width * height > PNG_MAX_PIXELS)){
             goto cleanup;
         }
+        
+        test_cve_2015_8472(png, info);
+        // debug output
+        // png_byte bit_depth = png_get_bit_depth(png, info);
+        // printf("[*] bit depth = %d\n", bit_depth);
+        // png_colorp palette = NULL;
+        // int num_palette = 0;
+        // int ret = png_get_PLTE(png, info, &palette, &num_palette);
+        // if (ret & PNG_INFO_PLTE) {
+        //     printf("[*] num_palette = %d\n", num_palette);
+        // } else {
+        //     printf("[-] missing PLTE\n");
+        // }
         
         /* optionally apply transformations */
         // png_set_expand(png); /* palette -> RGB */
