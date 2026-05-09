@@ -77,7 +77,6 @@ fuzz-persistent: png_fuzz_persistent
 fuzz-nosan: png_fuzz_nosan
 	afl-fuzz -i $(SEEDS) -o $(FINDINGS_NOSAN) -x $(DICT) -- ./png_fuzz_nosan @@
 
-
 # --- Analysis -----------
 plot:
 	afl-plot $(FINDINGS)/default/        plot_output/

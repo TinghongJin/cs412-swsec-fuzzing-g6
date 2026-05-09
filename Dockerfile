@@ -17,7 +17,7 @@ RUN wget https://download.sourceforge.net/libpng/libpng-1.2.27.tar.gz \
     && rm libpng-1.2.27.tar.gz
 
 # Copy relevant files
-COPY seeds/   /work/seeds/
+COPY seeds_with_config/   /work/seeds/
 COPY src/     /work/src/
 COPY Makefile /work/Makefile
 COPY changes.patch /work/changes.patch
