@@ -15,7 +15,7 @@ FINDINGS_NOSAN = findings-nosan/
 
 # --- Build targets -----------------------------------------------
 .PHONY: build fuzz fuzz-qemu fuzz-persistent fuzz-nosan \
-        plot triage seeds clean
+        plot clean
 
 build: png_fuzz png_fuzz_qemu png_fuzz_nosan png_fuzz_persistent
 
