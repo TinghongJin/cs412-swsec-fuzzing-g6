@@ -1,0 +1,14 @@
+--- libpng-1.2.27/pngrutil.c	2008-04-30 12:23:13.000000000 +0200
++++ libpng-1.2.27_new/pngrutil.c	2026-05-09 19:02:13.271050837 +0200
+@@ -165,7 +165,10 @@
+    if (need_crc)
+    {
+       crc = png_get_uint_32(crc_bytes);
+-      return ((int)(crc != png_ptr->crc));
++      if (crc != png_ptr->crc)
++         fprintf(stderr, "NOTE: CRC in the file is 0x%08x, change to 0x%08x\n", crc, png_ptr->crc);
++
++      return ((int)(1 != 1));
+    }
+    else
+       return (0);

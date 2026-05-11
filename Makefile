@@ -1,9 +1,9 @@
 # --- Paths -------------------------------------------------------
 
-INST         = libpng-1.6.15/install
-INST_NOSAN   = libpng-1.6.15_nosan/install_nosan
-INST_VANILLA = libpng-1.6.15_vanilla/install_vanilla
-INST_CRASH   = libpng-1.6.15_crash/install_crash
+INST         = libpng-1.2.27/install
+INST_NOSAN   = libpng-1.2.27_nosan/install_nosan
+INST_VANILLA = libpng-1.2.27_vanilla/install_vanilla
+INST_CRASH   = libpng-1.2.27_crash/install_crash
 DICT         = png.dict
 SEEDS        = seeds/
 
@@ -25,17 +25,17 @@ png_fuzz: src/harness.c
 	    $< \
 	    -I$(INST)/include \
 	    -L$(INST)/lib \
-	    -lpng16 -lz -lm \
+	    -lpng12 -lz -lm \
 	    -o $@
 
-png_fuzz_crash: src/harness.c
-	afl-clang-fast \
-	    -fsanitize=address -g -O1 -fno-omit-frame-pointer \
-	    $< \
-	    -I$(INST_CRASH)/include \
-	    -L$(INST_CRASH)/lib \
-	    -lpng16 -lz -lm \
-	    -o $@
+# png_fuzz_crash: src/harness.c
+# 	afl-clang-fast \
+# 	    -fsanitize=address -g -O1 -fno-omit-frame-pointer \
+# 	    $< \
+# 	    -I$(INST_CRASH)/include \
+# 	    -L$(INST_CRASH)/lib \
+# 	    -lpng12 -lz -lm \
+# 	    -o $@
 
 png_fuzz_nosan: src/harness.c
 	afl-clang-fast \
@@ -43,7 +43,7 @@ png_fuzz_nosan: src/harness.c
 	    $< \
 	    -I$(INST_NOSAN)/include \
 	    -L$(INST_NOSAN)/lib \
-	    -lpng16 -lz -lm \
+	    -lpng12 -lz -lm \
 	    -o $@
 
 png_fuzz_qemu: src/harness.c
@@ -51,7 +51,7 @@ png_fuzz_qemu: src/harness.c
 	    $< \
 	    -I$(INST_VANILLA)/include \
 	    -L$(INST_VANILLA)/lib \
-	    -lpng16 -lz -lm \
+	    -lpng12 -lz -lm \
 	    -o $@
 
 png_fuzz_persistent: src/harness_persistent.c
@@ -60,7 +60,7 @@ png_fuzz_persistent: src/harness_persistent.c
 	    $< \
 	    -I$(INST)/include \
 	    -L$(INST)/lib \
-	    -lpng16 -lz -lm \
+	    -lpng12 -lz -lm \
 	    -o $@
 
 
@@ -76,7 +76,6 @@ fuzz-persistent: png_fuzz_persistent
 
 fuzz-nosan: png_fuzz_nosan
 	afl-fuzz -i $(SEEDS) -o $(FINDINGS_NOSAN) -x $(DICT) -- ./png_fuzz_nosan @@
-
 
 # --- Analysis -----------
 plot:
