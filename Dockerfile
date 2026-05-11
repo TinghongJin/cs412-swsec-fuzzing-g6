@@ -46,7 +46,7 @@ WORKDIR /work/libpng-1.2.27
 RUN autoreconf -fiv
 RUN CC=afl-clang-fast \
     CXX=afl-clang-fast++ \
-    CFLAGS="-fsanitize=address -g -O1 " \
+    CFLAGS="-fsanitize=address -g -O1 -fno-omit-frame-pointer" \
     LDFLAGS="-fsanitize=address" \
     ./configure --disable-shared  --prefix=$(pwd)/install \
     && printf '\nlibpng.vers:\n\t@true\n' >> Makefile \
