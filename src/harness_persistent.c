@@ -23,7 +23,7 @@
 
 #define HERE fprintf(stderr, "%s: %d\n", __FILE__, __LINE__);
 #define PNG_LIB_STR PNG_LIBPNG_VER_STRING
-#define CONFIG_SIZE 16 // the number of leading bytes used for configuration instead of png
+#define CONFIG_SIZE 32 // the number of leading bytes used for configuration instead of png
 
 // We limit width x height so that we have better flexibililty
 #define PNG_MAX_PIXELS 262144
@@ -172,6 +172,19 @@ void run_png_set(png_struct *png, uint8_t config[CONFIG_SIZE]){
         png_set_read_user_transform_fn(png, my_fuzz_transform_callback);
         png_set_user_transform_info(png, config, 8, 3); // The two numbers are arbitrary (but valid).
     }
+    if (flags & (1 << 12)){
+        png_color_16 bg_color;
+        bg_color.index = config[14];
+        bg_color.red   = (config[15] << 8) | config[16];
+        bg_color.green = (config[17] << 8) | config[18];
+        bg_color.blue  = (config[19] << 8) | config[20];
+        bg_color.gray  = (config[21] << 8) | config[22];
+        int gamma_code = config[23] % 4;
+        int need_expand = config[24] % 2;
+        double bg_gamma = (double)(config[25] + 1) / 100.0;
+        png_set_background(png, &bg_color, gamma_code, need_expand, bg_gamma);
+    }
+
 }
 
 #ifndef DEBUG_FILE_INPUT

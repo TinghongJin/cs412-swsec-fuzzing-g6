@@ -24,9 +24,9 @@ for img in "$INPUT_DIR"/*.png; do
     
     filename=$(basename "$img")
     
-    printf '\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00' | cat - "$img" > "$OUTPUT_DIR/$filename"
+    printf '\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00' | cat - "$img" > "$OUTPUT_DIR/$filename"
     
     ((count++))
 done
 
-echo "[+] Finished adding 16-byte header for $count seeds."
+echo "[+] Finished adding 32-byte header for $count seeds."
