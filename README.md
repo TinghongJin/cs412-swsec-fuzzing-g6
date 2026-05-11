@@ -18,7 +18,7 @@ swsec-fuzzing/
 │
 ├── src/
 │   ├── harness.c
-│   ├── harness_persistent.c
+│   └── harness_persistent.c
 │
 ├── seeds/
 ├── seeds_with_config/
@@ -39,8 +39,8 @@ swsec-fuzzing/
 │   └── low_freq.png
 │
 └── plot_output_qemu/
-├── index.html
-├── edges.png
-├── exec_speed.png
-├── high_freq.png
-└── low_freq.png
+│   ├── index.html
+│   ├── edges.png
+│   ├── exec_speed.png
+│   ├── high_freq.png
+│   └── low_freq.png
