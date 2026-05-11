@@ -7,15 +7,12 @@ This repository contains the source code, experimental data, and final report fo
 ```text
 swsec-fuzzing/
 ├── Dockerfile
-
 ├── Makefile
-
+│
 ├── changes.patch
-
 ├── convert_seeds.sh
-
 ├── png.dict
-
+│
 ├── report.tex
 ├── report.pdf
 │
