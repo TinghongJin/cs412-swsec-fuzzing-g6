@@ -6,15 +6,25 @@ This repository contains the source code, experimental data, and final report fo
 
 ```text
 swsec-fuzzing/
-├── Dockerfile   
-├── Makefile     
+├── Dockerfile
+
+├── Makefile
+
+├── changes.patch
+
+├── convert_seeds.sh
+
+├── png.dict
+
 ├── report.tex
 ├── report.pdf
 │
 ├── src/
-│   └── harness.c
+│   ├── harness.c
+│   ├── harness_persistent.c
 │
-├── patches/
+├── seeds/
+├── seeds_with_config/
 │
 ├── findings/
 │   └── default/
@@ -32,8 +42,8 @@ swsec-fuzzing/
 │   └── low_freq.png
 │
 └── plot_output_qemu/
-    ├── index.html
-    ├── edges.png
-    ├── exec_speed.png
-    ├── high_freq.png
-    └── low_freq.png
+├── index.html
+├── edges.png
+├── exec_speed.png
+├── high_freq.png
+└── low_freq.png
