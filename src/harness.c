@@ -153,8 +153,7 @@ int main(int argc, char **argv) {
 
     width  = png_get_image_width(png, info);
     height = png_get_image_height(png, info);
-    if ((size_t)height > PNG_SIZE_MAX / sizeof(png_bytep))
-        png_error(png, "Image is too tall");
+
     if (!width || !height || width > PNG_MAX_WIDTH || height > PNG_MAX_HEIGHT ||
         width * height > PNG_MAX_PIXELS)
         goto cleanup;
