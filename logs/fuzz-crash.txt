@@ -1,0 +1,59 @@
+[AFL++ a8cebb2c0cea] /work # ./png_fuzz triaged_crashes/heap-buffer-overflow/id:000084,sig:06,src:000140,time:186299,execs:161730,op:havoc,rep:2
+NOTE: CRC in the file is 0x878b5003, change to 0x51553359
+NOTE: CRC in the file is 0x0049454e, change to 0xbc1a9008
+=================================================================
+==3731807==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x502000000011 at pc 0x560802d1f44f bp 0x7fffbaf4d4d0 sp 0x7fffbaf4d4c8
+READ of size 1 at 0x502000000011 thread T0
+    #0 0x560802d1f44e in png_handle_sCAL /work/libpng-1.2.27/pngrutil.c:1750:8
+    #1 0x560802ce5fc2 in png_read_info /work/libpng-1.2.27/pngread.c:491:10
+    #2 0x560802cd6f16 in main /work/src/harness.c:158:5
+    #3 0x7fd1e44221c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #4 0x7fd1e442228a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #5 0x560802bf44d4 in _start (/work/png_fuzz+0x314d4) (BuildId: 5a462f486ac9c2653b49e7d5546d542781a84288)
+
+0x502000000011 is located 0 bytes after 1-byte region [0x502000000010,0x502000000011)
+allocated by thread T0 here:
+    #0 0x560802c94303 in malloc (/work/png_fuzz+0xd1303) (BuildId: 5a462f486ac9c2653b49e7d5546d542781a84288)
+    #1 0x560802d12d6b in png_malloc_default /work/libpng-1.2.27/pngmem.c:483:10
+    #2 0x560802d12d6b in png_malloc /work/libpng-1.2.27/pngmem.c:440:15
+    #3 0x560802d12d6b in png_malloc_warn /work/libpng-1.2.27/pngmem.c:549:21
+    #4 0x560802d1efec in png_handle_sCAL /work/libpng-1.2.27/pngrutil.c:1729:24
+    #5 0x560802ce5fc2 in png_read_info /work/libpng-1.2.27/pngread.c:491:10
+    #6 0x560802cd6f16 in main /work/src/harness.c:158:5
+    #7 0x7fd1e44221c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #8 0x7fd1e442228a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #9 0x560802bf44d4 in _start (/work/png_fuzz+0x314d4) (BuildId: 5a462f486ac9c2653b49e7d5546d542781a84288)
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow /work/libpng-1.2.27/pngrutil.c:1750:8 in png_handle_sCAL
+Shadow bytes around the buggy address:
+  0x501ffffffd80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x501ffffffe00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x501ffffffe80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x501fffffff00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x501fffffff80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+=>0x502000000000: fa fa[01]fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000080: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000100: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000180: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000200: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000280: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==3731807==ABORTING
