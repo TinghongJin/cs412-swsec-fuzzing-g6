@@ -37,7 +37,7 @@ void my_fuzz_transform_callback(png_structp png_ptr, png_row_infop row_info, png
     }
 }
 
-void run_png_set(png_structp png, uint8_t config[CONFIG_SIZE]) {
+void run_png_set(png_structp png, png_infop info, uint8_t config[CONFIG_SIZE]) {
     uint32_t flags = *(uint32_t *)&config[0];
     if (flags & (1 << 0)) png_set_strip_16(png);
     if (flags & (1 << 1)) png_set_strip_alpha(png);
@@ -89,7 +89,13 @@ void run_png_set(png_structp png, uint8_t config[CONFIG_SIZE]) {
     }
     if (flags & (1 << 12)) {
         png_color_16 bg_color;
-        bg_color.index = config[14];
+        png_colorp palette;
+        int num_palette = 0;
+        if (png_get_PLTE(png, info, &palette, &num_palette) && num_palette > 0) {
+            bg_color.index = config[14] % num_palette;
+        } else {
+            bg_color.index = 0;
+        }
         bg_color.red   = (config[15] << 8) | config[16];
         bg_color.green = (config[17] << 8) | config[18];
         bg_color.blue  = (config[19] << 8) | config[20];
@@ -158,10 +164,13 @@ int main(int argc, char **argv) {
         width * height > PNG_MAX_PIXELS)
         goto cleanup;
 
-    run_png_set(png, config);
+    run_png_set(png, info, config);
     png_read_update_info(png, info);
 
     size_t rowbytes = png_get_rowbytes(png, info);
+    size_t max_safe_rowbytes = width * 8;
+    rowbytes = (rowbytes > max_safe_rowbytes) ? rowbytes : max_safe_rowbytes;
+
     row_pointers = (png_bytep *)png_malloc(png, height * sizeof(png_bytep));
     if ((size_t)height > PNG_SIZE_MAX / rowbytes) {
         png_free(png, row_pointers);
