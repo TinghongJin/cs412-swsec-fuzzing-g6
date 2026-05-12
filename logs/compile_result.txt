@@ -1,0 +1,37 @@
+[AFL++ a8cebb2c0cea] /work # make
+afl-clang-fast \
+    -fsanitize=address -g -O1 -fno-omit-frame-pointer \
+    src/harness.c \
+    -Ilibpng-1.2.27/install/include \
+    -Llibpng-1.2.27/install/lib \
+    -lpng12 -lz -lm \
+    -o png_fuzz
+afl-cc++4.41a by Michal Zalewski, Laszlo Szekeres, Marc Heuse - mode: LLVM-PCGUARD
+SanitizerCoveragePCGUARD++4.41a
+[+] Instrumented 70 locations with no collisions (non-hardened mode) of which are 4 handled and 0 unhandled special instructions.
+gcc -g -O1 -fno-omit-frame-pointer\
+    src/harness.c \
+    -Ilibpng-1.2.27_vanilla/install_vanilla/include \
+    -Llibpng-1.2.27_vanilla/install_vanilla/lib \
+    -lpng12 -lz -lm \
+    -o png_fuzz_qemu
+afl-clang-fast \
+    -g -O1 -fno-omit-frame-pointer\
+    src/harness.c \
+    -Ilibpng-1.2.27_nosan/install_nosan/include \
+    -Llibpng-1.2.27_nosan/install_nosan/lib \
+    -lpng12 -lz -lm \
+    -o png_fuzz_nosan
+afl-cc++4.41a by Michal Zalewski, Laszlo Szekeres, Marc Heuse - mode: LLVM-PCGUARD
+SanitizerCoveragePCGUARD++4.41a
+[+] Instrumented 73 locations with no collisions (non-hardened mode) of which are 6 handled and 0 unhandled special instructions.
+afl-clang-fast \
+    -fsanitize=address -g -O1 -fno-omit-frame-pointer \
+    src/harness_persistent.c \
+    -Ilibpng-1.2.27/install/include \
+    -Llibpng-1.2.27/install/lib \
+    -lpng12 -lz -lm \
+    -o png_fuzz_persistent
+afl-cc++4.41a by Michal Zalewski, Laszlo Szekeres, Marc Heuse - mode: LLVM-PCGUARD
+SanitizerCoveragePCGUARD++4.41a
+[+] Instrumented 91 locations with no collisions (non-hardened mode) of which are 7 handled and 0 unhandled special instructions. 1 instrumentation saved.
