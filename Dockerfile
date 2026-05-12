@@ -21,6 +21,7 @@ COPY seeds_with_config/   /work/seeds/
 COPY src/     /work/src/
 COPY Makefile /work/Makefile
 COPY changes.patch /work/changes.patch
+COPY fix_overflow.patch /work/fix-global-buffer-overflow.patch
 COPY png.dict /work/png.dict
 COPY crash/default/crashes/ /work/crash/
 COPY Makefile /work/Makefile

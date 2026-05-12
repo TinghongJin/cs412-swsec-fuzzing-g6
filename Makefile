@@ -66,16 +66,16 @@ png_fuzz_persistent: src/harness_persistent.c
 
 # --- Fuzzing campaigns -------------------------------------------
 fuzz: png_fuzz
-	afl-fuzz -i $(SEEDS) -o $(FINDINGS) -x $(DICT) -- ./png_fuzz @@
+	afl-fuzz -V 1800 -i $(SEEDS) -o $(FINDINGS) -x $(DICT) -- ./png_fuzz @@
 
 fuzz-qemu: png_fuzz_qemu
-	afl-fuzz -Q -i $(SEEDS) -o $(FINDINGS_QEMU) -x $(DICT) -- ./png_fuzz_qemu @@
+	afl-fuzz -V 1800 -Q -i $(SEEDS) -o $(FINDINGS_QEMU) -x $(DICT) -- ./png_fuzz_qemu @@
 
 fuzz-persistent: png_fuzz_persistent
-	afl-fuzz -i $(SEEDS) -o $(FINDINGS_PERSISTENT) -x $(DICT) -- ./png_fuzz_persistent @@
+	afl-fuzz -V 1800 -i $(SEEDS) -o $(FINDINGS_PERSISTENT) -x $(DICT) -- ./png_fuzz_persistent @@
 
 fuzz-nosan: png_fuzz_nosan
-	afl-fuzz -i $(SEEDS) -o $(FINDINGS_NOSAN) -x $(DICT) -- ./png_fuzz_nosan @@
+	afl-fuzz -V 1800 -i $(SEEDS) -o $(FINDINGS_NOSAN) -x $(DICT) -- ./png_fuzz_nosan @@
 
 # --- Analysis -----------
 plot:

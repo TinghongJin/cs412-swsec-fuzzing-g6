@@ -1,0 +1,12 @@
+--- pngerror.c.orig	2026-05-12 12:28:58.368790309 +0200
++++ pngerror.c	2026-05-12 13:49:00.790703086 +0200
+@@ -167,7 +167,8 @@
+    {
+       buffer[iout++] = ':';
+       buffer[iout++] = ' ';
+-      png_memcpy(buffer+iout, error_message, PNG_MAX_ERROR_TEXT);
++      // png_memcpy(buffer+iout, error_message, PNG_MAX_ERROR_TEXT);
++      strncpy((char *)(buffer + iout), error_message, 63);
+       buffer[iout+PNG_MAX_ERROR_TEXT-1] = '\0';
+    }
+ }

@@ -270,8 +270,6 @@ int main(int argc, char **argv) {
         /* read pixel data */
         // WARN: Call png_read_update_info(png, info) before png_get_rowbytes if any transformation is performed
         size_t rowbytes = png_get_rowbytes(png, info);
-        size_t max_safe_rowbytes = width * 8;
-        rowbytes = (rowbytes > max_safe_rowbytes) ? rowbytes : max_safe_rowbytes;
         row_pointers = (png_bytep *)png_malloc(png, height * sizeof(png_bytep));
         if (((size_t)height) > (PNG_SIZE_MAX / rowbytes)) {
             png_free(png, row_pointers);

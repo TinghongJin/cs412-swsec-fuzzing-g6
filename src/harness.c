@@ -168,8 +168,6 @@ int main(int argc, char **argv) {
     png_read_update_info(png, info);
 
     size_t rowbytes = png_get_rowbytes(png, info);
-    size_t max_safe_rowbytes = width * 8;
-    rowbytes = (rowbytes > max_safe_rowbytes) ? rowbytes : max_safe_rowbytes;
 
     row_pointers = (png_bytep *)png_malloc(png, height * sizeof(png_bytep));
     if ((size_t)height > PNG_SIZE_MAX / rowbytes) {

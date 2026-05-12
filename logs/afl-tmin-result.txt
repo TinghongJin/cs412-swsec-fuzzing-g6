@@ -1,0 +1,99 @@
+[AFL++ 373976ac2d76] /work # afl-tmin -i ./triaged_crashes/heap-buffer-overflow/id\:000060\,sig\:06\,src\:000022\,time\:91828\,execs\:80136\,op\:havoc\,rep\:14 -o ./minimized_crash.png -- ./png_fuzz @@
+afl-tmin++4.41a by Michal Zalewski
+
+[+] Read 1673 bytes from './triaged_crashes/heap-buffer-overflow/id:000060,sig:06,src:000022,time:91828,execs:80136,op:havoc,rep:14'.
+[*] Performing dry run (mem limit = 0 MB, timeout = 1000 ms)...
+[+] Program exits with a signal, minimizing in crash mode.
+[*] Stage #0: One-time block normalization...
+[+] Block normalization complete, 1593 bytes replaced.
+[*] --- Pass #1 ---
+[*] Stage #1: Removing blocks of data...
+    Block length = 128, remaining size = 1673
+    Block length = 64, remaining size = 128
+    Block length = 32, remaining size = 128
+    Block length = 16, remaining size = 128
+    Block length = 8, remaining size = 96
+    Block length = 4, remaining size = 96
+    Block length = 2, remaining size = 96
+    Block length = 1, remaining size = 96
+[+] Block removal complete, 1578 bytes deleted.
+[*] Stage #2: Minimizing symbols (32 code points)...
+[+] Symbol minimization finished, 10 symbols (13 bytes) replaced.
+[*] Stage #3: Character minimization...
+[+] Character minimization done, 9 bytes replaced.
+[*] --- Pass #2 ---
+[*] Stage #1: Removing blocks of data...
+    Block length = 8, remaining size = 95
+    Block length = 4, remaining size = 95
+    Block length = 2, remaining size = 95
+    Block length = 1, remaining size = 95
+[+] Block removal complete, 0 bytes deleted.
+
+     File size reduced by : 94.32% (to 95 bytes)
+    Characters simplified : 1700.00%
+     Number of execs done : 413
+          Fruitless execs : path=277 crash=0 hang=0
+
+[*] Writing output to './minimized_crash.png'...
+[+] We're done here. Have a nice day!
+
+[AFL++ 373976ac2d76] /work # ./png_fuzz ./minimized_crash.png 
+NOTE: CRC in the file is 0x30303030, change to 0x5869809e
+NOTE: CRC in the file is 0x30303030, change to 0xe622a3d4
+NOTE: CRC in the file is 0x30303030, change to 0xbc1a9008
+=================================================================
+==1440871==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x502000000011 at pc 0x560c9290445f bp 0x7ffd5029f710 sp 0x7ffd5029f708
+READ of size 1 at 0x502000000011 thread T0
+    #0 0x560c9290445e in png_handle_sCAL /work/libpng-1.2.27/pngrutil.c:1750:8
+    #1 0x560c928cafd2 in png_read_info /work/libpng-1.2.27/pngread.c:491:10
+    #2 0x560c928bbf16 in main /work/src/harness.c:158:5
+    #3 0x7fc0e65fc1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #4 0x7fc0e65fc28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #5 0x560c927d94d4 in _start (/work/png_fuzz+0x314d4) (BuildId: 6eb0803d53fe510fb3a5987cc06bdc8fef9ebda7)
+
+0x502000000011 is located 0 bytes after 1-byte region [0x502000000010,0x502000000011)
+allocated by thread T0 here:
+    #0 0x560c92879303 in malloc (/work/png_fuzz+0xd1303) (BuildId: 6eb0803d53fe510fb3a5987cc06bdc8fef9ebda7)
+    #1 0x560c928f7d7b in png_malloc_default /work/libpng-1.2.27/pngmem.c:483:10
+    #2 0x560c928f7d7b in png_malloc /work/libpng-1.2.27/pngmem.c:440:15
+    #3 0x560c928f7d7b in png_malloc_warn /work/libpng-1.2.27/pngmem.c:549:21
+    #4 0x560c92903ffc in png_handle_sCAL /work/libpng-1.2.27/pngrutil.c:1729:24
+    #5 0x560c928cafd2 in png_read_info /work/libpng-1.2.27/pngread.c:491:10
+    #6 0x560c928bbf16 in main /work/src/harness.c:158:5
+    #7 0x7fc0e65fc1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #8 0x7fc0e65fc28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #9 0x560c927d94d4 in _start (/work/png_fuzz+0x314d4) (BuildId: 6eb0803d53fe510fb3a5987cc06bdc8fef9ebda7)
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow /work/libpng-1.2.27/pngrutil.c:1750:8 in png_handle_sCAL
+Shadow bytes around the buggy address:
+  0x501ffffffd80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x501ffffffe00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x501ffffffe80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x501fffffff00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x501fffffff80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+=>0x502000000000: fa fa[01]fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000080: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000100: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000180: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000200: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000280: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==1440871==ABORTING
