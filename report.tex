@@ -29,53 +29,65 @@
 \title{Software Security CS-412: Fuzzing Lab Report:\\Fuzzing libpng 1.2.27}
 
 \author{
-  {\rm Dominique Sheng Huang}\\EPFL
-  \and
-  {\rm Tinghong Jin}\\EPFL
-  \and
-  {\rm Menghan Li}\\menghan.li@epfl.ch
-  \and
-  {\rm Shunchang Liu}\\EPFL
+  \setlength{\tabcolsep}{8pt} 
+    \begin{tabular}{cccc}
+        {\rm Dominique Huang} & {\rm Tinghong Jin} & {\rm Menghan Li} & {\rm Shunchang Liu} \\
+        dominique.huang@epfl.ch & tinjin@student.ethz.ch & menghan.li@epfl.ch & shunchang.liu@epfl.ch
+    \end{tabular}
 }
 
 \maketitle
 
+\newcommand{\liu}[1]{\textcolor{blue}{\small\textbf{[Liu: #1]}}}
+
 % -----------------------------------------------------------------
 % Q1 — Harness Design
-% -----------------------------------------------------------------
-% 插入harness代码-引用？See Listing~\ref{lst:harness} in the appendix for the full harness source code.
+% ----------------------------------------------
 
 \section{Harness Design}
+All code and results are available in our github repository\footnote{\url{https://github.com/TinghongJin/cs412-swsec-fuzzing-g6}}.
 \label{sec:q1}
-\paragraph{Entry Point Choice:}~\\[0.3em]
-We chose a set of Low-level Decoder \& Transformation APIs as our entry point. For example, after reading the metadata with \texttt{png\_read\_info}, we used a customized \texttt{run\_png\_set} function to invoke different combinations of the \texttt{png\_set\_*} family functions (such as \texttt{png\_set\_dither}, \texttt{png\_set\_gamma}, \texttt{png\_set\_rgb\_to\_gray}, etc.) to alter the decoder's state. Subsequently, we allocate the appropriate memory space and read the image data using \texttt{png\_read\_image()}.\\[0.3em]
-\textbf{Analysis:} In real-world scenarios, image libraries mostly receive untrusted input, thus making the decoder a relatively large attack surface. Furthermore, our rationale for creating a customized function to invoke different combinations of \texttt{png\_set\_*} functions is that libpng vulnerabilities do not solely exist in header parsing. Rather, they often lie within the various combinations of complex image transformation logic. Therefore, the core logic of our customized transformation calls is using the first 16 bytes of the input file as a ``Configuration'' to generate a call sequence(combination) for the \texttt{png\_set\_*} APIs. This enables AFL to explore deeper paths within libpng and trigger branches that increase code coverage.
+\subsection{Entry Point Choice}
+% We chose a set of Low-level Decoder \& Transformation APIs as our entry point. 
+We chose the libpng decoder pipeline, specifically utilizing the API sequence \lstinline|png_create_read_struct|, \lstinline|png_read_info|, \lstinline|png_set_*| transformations, and \lstinline|png_read_image|.
+In real-world scenarios, image libraries mostly receive untrusted input, thus making the decoder a relatively large attack surface.  By choosing low-level API functions, we could call on its various upstream logic to build more complex states. This gives us a higher chance of finding bugs.
+
+We rejected the encoder pipeline because its input is provided by the host application, making it more trustworthy and difficult for an attacker to manipulate.
+We did not use the high-level API because we consider it allows for a limited range of configurations and covers fewer possible states, making it difficult to uncover deeply hidden vulnerabilities.
+
+We believe another API function we did not choose but worth fuzzing is \lstinline|png_process_data|, which progressively decodes data. In a browser environment, data arrives in chunks via network packets, so the browser needs to decode it progressively. Thus this API is closely aligned with real-world applications. On the other hand, progressively decoding involves saving and resuming states, which brings more complex logic and may introduce memory management vulnerabilities.
+% \liu{Clarify: did we use png\_process\_data or not? State the decision explicitly either way?}
+
+\subsection{Dataflow Trace}
+
+To align with the persistent version, we perform in-memory data reading by setting up a read handler and a callback function provided to libpng for reading data.
+While we can directly read data from AFL++'s \lstinline|__AFL_FUZZ_TESTCASE_BUF| in the persistent mode, in the non-persistent mode we load the testcase file into the memory as preparation.
+
+We use the first 32 bytes of the input file as a ``configuration'' to generate a call sequence and arguments for the \lstinline|png_set_*| APIs. We use the first four bytes as a bitmask to determine which transformations to enable. The bytes following the bitmask are used to generate the data provided to \lstinline|png_set_*| function calls.
+We believe that libpng vulnerabilities do not solely exist in header parsing. Rather, they often lie within the various combinations of complex image transformation logic. Therefore, we would like to invoke all the \lstinline{png_set_*} functions before calling \lstinline{png_read_image()}. However, enabling all the transformations at the same time also has its downside that subsequent transformations may hide the bugs from previous transformations. Moreover, libpng ignores the conflicting transformations which will consequently limit the variety of transformations we can actually reach. To solve the problem, we used AFL++ generated bytes to fuzz the transformation coverage as well as arguments. This enables AFL to explore deeper paths within libpng and trigger branches that increase code coverage.
+
+We use the rest of the testcase input as the PNG payload. The API function \lstinline|png_read_info| reads the PNG header, retrieves or calculates the image's information such as width and height. After that, we use the 32-byte configuration to call various \lstinline{png_set_*} functions. They set flags to indicate transformations. We call \lstinline|png_read_update_info| to synchronize the context's information with the transformations. We allocate memory according to height and rowbytes, and set up the row pointers accordingly. We observed that the value returned by \lstinline|png_get_rowbytes| can be manipulated by malformed bit-depth information in the IHDR chunk. However, we deliberately rely on this potentially tainted value for our buffer allocation to mirror \lstinline|libpng|'s internal assumptions. We then call \lstinline|png_read_image| to decode the payload, followed by \lstinline|png_read_end| to process any trailing chunks.
+
+If we further trace the dataflow, \lstinline|png_read_image| decodes the data by row. For each row, the function \lstinline|png_read_row| decompresses the data via zlib, restores the colors using previous rows, applies all the flagged transformations, and copies the decoded data into our provided buffer.
+
+% \paragraph{Dataflow of Harness (persistent) code:}In our Harness code design, the data flow from AFL++ to the libpng API is as follows:
+% \begin{itemize}[leftmargin=*]
+%     \item Get input: The test cases generated by AFL are first loaded into the pointer \texttt{buf}, and then divided into two parts: the first 32 bytes are extracted into \texttt{config}, and the remaining bytes are the PNG image payload.
+%     \item Handle I/O: We created a custom memory read callback, \texttt{png\_read\_callback\_fn}, using \texttt{png\_set\_read\_fn}. The \texttt{read\_handle} structure stores the memory address and size of the PNG payload.
+%     \item Get Metadata: Then, call \texttt{png\_read\_info} to pull data from \texttt{buf}, parse header information such as IHDR, and obtain the original width, height and color type, etc.
+%     \item Customized Transformation combination: Next, we receive the first 32 bytes of configuration data \texttt{config} through the custom \texttt{run\_png\_set}, and generate flags and their corresponding values based on them. Different flag values correspond to different transformation function APIs, so each time AFL mutates these configuration bytes, different \texttt{png\_set\_*} functions will be triggered.
+%     \item Read data: Finally, call \texttt{png\_read\_update\_info} to update the converted image information, then allocate memory and call \texttt{png\_read\_image} to write the pixel data into the allocated \texttt{row\_pointers} buffer.
+% \end{itemize}
 
 
-\paragraph{Alternatives:}~\\
-
-
-\paragraph{Data-Flow of Harness (persistent) code:}In our Harness code design, the data flow from AFL++ to the libpng API is as follows:
+\subsection{Guards}
+Each Guard in the code is designed to minimize false positives generated by fuzzing, thus preventing waste of control flow and resources. In the following branches, we clean up the states and exits gracefully.
 \begin{itemize}[leftmargin=*]
-    \item Get input: The test cases generated by AFL are first loaded into the pointer \texttt{buf}, and then divided into two parts: the first 16 bytes are extracted into \texttt{config}, and the remaining bytes are the PNG image payload.
-    \item Handle I/O: We created a custom memory read callback, \texttt{png\_read\_callback\_fn}, using \texttt{png\_set\_read\_fn}. The \texttt{read\_handle} structure stores the memory address and size of the PNG payload.
-    \item Get Metadata: Then, call \texttt{png\_read\_info} to pull data from \texttt{buf}, parse header information such as IHDR, and obtain the original width, height and color type, etc.
-    \item Customized Transformation combination: Next, we receive the first 16 bytes of configuration data \texttt{config} through the custom \texttt{run\_png\_set}, and generate flags and their corresponding values based on them. Different flag values correspond to different transformation function APIs, so each time AFL mutates these configuration bytes, different \texttt{png\_set\_*} functions will be triggered.
-    \item Read data: Finally, call \texttt{png\_read\_update\_info} to update the converted image information, then allocate memory and call \texttt{png\_read\_image} to write the pixel data into the allocated \texttt{row\_pointers} buffer.
+    \item \lstinline|if (len <= CONFIG_SIZE)|: Ensure the input is long enough to extract the configuration bytes; otherwise, direct extraction will result in an OOB Read, leading to false positives.
+    \item \lstinline|if (!png) ... if (!info) ...|: Libpng failed to allocate the context structures. This is usually due to out of memory instead of interesting bugs. 
+    \item \lstinline|if (setjmp(png_jmpbuf(png)))|: Error capture mechanism. When libpng encounters a malformed PNG, it calls \lstinline|longjmp| to terminate the process directly. If this is not captured, AFL will record it as a crash, causing false positives. Capturing it and executing cleanup code allow the program to handle malformed input stably.
+    \item \lstinline+if ((width == 0) || (height == 0) || (width > PNG_MAX_WIDTH) || height > PNG_MAX_HEIGHT || width * height > PNG_MAX_PIXELS)+: Prevent AFL from generating legally large images. We set thresholds (\lstinline|PNG_MAX_PIXELS = 262144, PNG_MAX_WIDTH = 4096, PNG_MAX_HEIGHT = 4096|) to ensure that CPU and memory resources are focused on exploring code paths, guaranteeing fuzzing throughput. 
 \end{itemize}
-
-
-\paragraph{Guards Explanation:} Each Guard in the code is designed to minimize false positives generated by fuzzing, thus preventing waste of control flow and resources.
-\begin{itemize}[leftmargin=*]
-    \item \texttt{if (len <= CONFIG\_SIZE)}: Ensure the input is long enough to extract the 16-byte configuration; otherwise, direct extraction will result in an OOB Read, leading to false positives.
-    \item \texttt{if (!png) ... if (!info)}: Prevent basic memory allocation failures.
-    \item \texttt{if (setjmp(png\_jmpbuf(png)))}: Error capture mechanism. When libpng encounters an malformed PNG, it calls \texttt{longjmp} to terminate the process directly. If this isn't captured, AFL will record it as a crash, causing false positives. Capturing it and jumping to \texttt{cleanup} allows the program to handle malformed input stably.
-    \item \texttt{if ((size\_t)height > PNG\_SIZE\_MAX / sizeof(png\_bytep))}: too large height?...
-    \item \texttt{if ((width == 0) || (height == 0) || (width > PNG\_MAX\_WIDTH) || ...)}: Prevent AFL from generating legally large images. Setting a reasonable threshold (\texttt{PNG\_MAX\_PIXELS}) ensures that CPU and memory resources are focused on exploring code paths, guaranteeing fuzzing throughput.
-\end{itemize}
-
-
-
 
 % -----------------------------------------------------------------
 % Q2 — Instrumentation and Sanitizers
@@ -84,205 +96,382 @@ We chose a set of Low-level Decoder \& Transformation APIs as our entry point. F
 \section{Instrumentation and Sanitizers}
 \label{sec:q2}
 
-\paragraph{Instrumentation \& Flags:}
+% \subsection{Compilation Flags}
+
+% \begin{itemize}[leftmargin=*]
+
+%     \item \lstinline|CC=afl-clang-fast| and \lstinline|CXX=afl-clang-fast++| replace the standard compiler with the AFL++ wrapper, which inserts edge-coverage probes at every control-flow edge during compilation. Without this substitution, AFL++ receives no execution feedback and reduces to unguided black-box mutation.
+
+%     \item \lstinline|-fsanitize=address| enables AddressSanitizer (ASan). ASan maps every 8 application bytes to 1 shadow byte; a non-zero shadow byte marks the region as poisoned, and any access to such a region raises an immediate diagnostic. Without this flag, narrow heap overflows produce no crash signal and are discarded by the fuzzer, leaving memory-safety violations undetected.
+
+%     \item \lstinline|-g| embeds DWARF symbols into the binary. Without them, ASan reports and debugger backtraces contain raw instruction addresses rather than source locations, making crash triage impractical.
+
+%     \item \lstinline|-O1| raises execution speed without the inlining of higher optimisation levels. Without it, fuzzer throughput drops from reduced execution speed. Higher levels such as \lstinline|-O2| risk merging basic blocks and distorting the coverage map.
+
+%     \item \lstinline|-fno-omit-frame-pointer| retains the frame pointer across all call frames. Without it, stack unwinding in the QEMU binary-only campaign or during sanitiser-free crash reproduction yields incomplete backtraces, impeding triage.
+
+% \end{itemize}
+
+\subsection{Compilation Flags}
+
 \begin{itemize}[leftmargin=*]
-    \item \texttt{CC=afl-clang-fast / CXX=afl-clang-fast++}: Used in white-box fuzzing. The compilation process calls the afl-clang-fast wrapper, which injects lightweight coverage tracking probes (instrumentaion) at the edges of each basic block in the CFG. If omitted, the fuzzer will not be able to obtain coverage feedback, degenerating into blind/blackbox fuzzing, and AFL will also not be able to know which mutations triggered new paths, resulting in inefficient fuzzing.
-    \item \texttt{-fsanitize=address}: This is ASan, which inserts``redzone'' around memory allocation and uses shadow memory to track memory state, in order to catch memory violations such as OOB and UAF at runtime; if omitted, many memory corruptions (such as only one or two bytes heap overflows) will not immediately cause crash, so these may be missed without ASan.
-    \item \texttt{-g}: To contains DWARF debugging information (including symbol tables and source code line number mappings) in the compiled binary file . If omitted, when ASan captures a memory corruption or a program crash, crash triage will become difficult without these infos because it's impossible to know which line in which source file the crash occurred.
-    \item \texttt{-O1}: Use first-level compiler optimizations to provide a basic performance improvement. If omitted, program execution will be slower, reducing the fuzzer's throughput (executions per second).
-    \item \texttt{-fno-omit-frame-pointer}: Used in black-box and noAsan fuzzing. Forces the compiler to keep the frame pointer in the register. If omitted, the generated call stack/backtrace may be broken or missing in QEMU-based black-box fuzzing or when debugging crash cases, making it impossible to trace how the function reached the location.
+
+    \item \lstinline|CC=afl-clang-fast| and \lstinline|CXX=afl-clang-fast++| substitute the standard compiler with the AFL++ wrapper, inserting edge-coverage probes at every control-flow edge. Omitting this reduces AFL++ to unguided black-box mutation.
+
+    \item \lstinline|-fsanitize=address| enables AddressSanitizer (ASan). ASan maps every 8 application bytes to 1 shadow byte, where a non-zero value marks the region as poisoned and any access raises an immediate diagnostic. The flag is necessary to surface narrow heap overflows that produce no crash signal and would otherwise be discarded by the fuzzer.
+
+    \item \lstinline|-g| embeds DWARF symbols into the binary, providing the source locations required for meaningful ASan reports and debugger backtraces during crash triage.
+
+    \item \lstinline|-O1| raises execution speed without the inlining of higher optimisation levels, which risk merging basic blocks and distorting the coverage map.
+
+    \item \lstinline|-fno-omit-frame-pointer| retains the frame pointer across all call frames, a requirement for reliable stack unwinding in the QEMU binary-only campaign and during sanitiser-free crash reproduction.
+
+    \item \lstinline|LDFLAGS=-fsanitize=address| links the ASan runtime into the final binary. Omitting it causes the ASan instrumentation inserted at compile time to have no effect at runtime.
+
+    \item \lstinline|--disable-shared| forces static linking of libpng, ensuring the instrumented library code is compiled directly into the harness binary. Dynamic linking risks loading an uninstrumented system-installed copy of libpng at runtime, silently bypassing all coverage instrumentation.
+
 \end{itemize}
 
-% 引用patch 代码?
-\paragraph{Patch:} The patch we used is in file ``changes.patch''.\\
-The working principle is to modify the conditional statement originally used to verify the CRC checksum of PNG chunks (from \texttt{crc != png\_ptr->crc} to a logic that always returns false, thereby forcing libpng to ignore all CRC validation errors. Regarding its effect on Path Discovery: since AFL's mutation strategy involves randomly flipping and modifying bytes, the original CRC value will no longer match once AFL alters the chunk. If the patch is omitted, the majority of mutated files will be directly rejected and discarded by libpng early in the parsing process (during the CRC validation phase). Consequently, code coverage would get stuck, preventing the fuzzer from exploring deeper code paths. Removing this check is essential to fully activate AFL's path exploration capabilities.
-
-
-
-
-
+\subsection{Source Patch}
+The patch targets \lstinline|png_crc_error| in \lstinline|pngrutil.c|, replacing \lstinline|return ((int)(crc != png_ptr->crc))| with \lstinline|return ((int)(1 != 1))| so that the function always reports no CRC mismatch. Without it, \lstinline|png_crc_error| returns~1 on any checksum mismatch, causing \lstinline|png_crc_finish| to invoke error handling that calls \lstinline|png_error| and aborts parsing via \lstinline|longjmp|, stalling path discovery before any chunk-specific logic is reached.
 
 
 
 % -----------------------------------------------------------------
 % Q3 — Seed Corpus and Dictionary
-% -----------------------------------------------------------------
-% 插入屏幕截图并引用，替换量化具体数值等
+% -----------------------------------------------------
 \section{Seed Corpus and Dictionary}
 \label{sec:q3}
-\paragraph{Seeds \& Dictionary Description:}~\\[0.3em]
-For the seeds, ....\\
-For the dictionary, we used the standard AFL PNG dictionary written by Michal Zalewski. This dictionary is specifically tailored to the PNG file format specification. It contains the basic components of a valid PNG file, including the mandatory 8-byte PNG file signature (\texttt{\textbackslash x89PNG\textbackslash x0d\textbackslash x0a\textbackslash x1a\textbackslash x0a}) and various 4-byte ASCII block type identifiers (e.g., IHDR for the header, IDAT for the image data, PLTE for the palette, and other auxiliary blocks such as tEXt or gAMA).
+\subsection{Seeds \& Dictionary Description}
 
-\paragraph{Quantitative Analysis:}
-According to the ``fuzzing strategy yields'' section of the AFL++ status screen, we can quantify the contribution of different mutation strategies to code coverage.\\
-\textbf{Havoc/Splice Strategy:} The havoc stage contributed the majority of new paths, yielding 1,272 new finds out of approximately 178 million executions (1272/178M). The splice strategy currently yielded 0 finds. Havoc is a highly destructive, multi-pass mutation stage which excels at exploring dense blocks of sequential logic and arithmetic boundaries once a basic code path is unlocked.\\
-\textbf{Dictionary Strategy:} The dictionary stage yielded 3 new finds out of roughly 99.6k total executions. Although this is fewer than the 1272 paths above, these dictionary based discoveries are structurally important because the probability of random destructive mutations correctly guessing 4-byte block identifiers like ``PLTE'' is extremely low. The dictionary strategy can effectively bypass these magic byte based bottleneck checks, unlocking new subtrees of the target control flow graph, which facilitates the subsequent discovery of more paths by the destructive mutation strategy.
+We used \href{https://github.com/pnggroup/libpng/tree/libpng16/contrib/pngsuite}{PngSuite}, the official libpng test suite, as our seed corpus. It covers all basic PNG color types including grayscale (1--16 bit), full-color (8 or 16 bit), paletted (1--8 bit), and alpha-channel variants, providing initial coverage of the color mapping and memory allocation logic across these code paths.
+Each seed was preprocessed by \lstinline|convert_seeds.sh|, which prepends 32 zero bytes as the initial configuration block required by our harness.
 
-\paragraph{Formal Terms Explanation:}
-Within the framework of formal language/grammar theory, file formats like PNG can be modeled as strings belonging to a specific formal language and constrained by its syntax (e.g., context-free grammars, CFG). Within the CFG-based Fuzzing, entries in our dictionary represent terminal symbols or lexical tokens that constitute the alphabet of that language. When libpng parses an input file, it essentially acts as a pushdown automaton or a complex state machine. It performs lexical analysis to read the input stream and expects specific terminal symbols (e.g., ``IHDR'') to trigger state transitions. Without these precise terminal symbols, the input string is considered syntactically invalid and rejected. Providing a dictionary can transform the fuzzer's behavior from blind and random strings mutation to syntax-aware mutation, enabling the deep semantic parsing logic of the target application.
+For the dictionary we used the standard AFL++ PNG dictionary, which contains the 8-byte file signature (\lstinline|\x89PNG\x0d\x0a\x1a\x0a|) and 4-byte chunk type identifiers such as \lstinline|IHDR|, \lstinline|IDAT|, and
+\lstinline|PLTE|. In formal grammar terms, these entries are the terminal symbols of the PNG format language. Libpng acts as a state machine that expects these tokens at specific syntactic positions to trigger valid parser transitions. Providing them transforms AFL++ from blind byte mutation into syntax-aware mutation, allowing the fuzzer to bypass early-rejection checks
+and reach deeper parsing logic.
+
+\subsection{Quantitative Analysis}
+% According to the ``fuzzing strategy yields'' section of the AFL++ status screen of fuzz campaign%\ref{fig:}
+% , we can quantify the contribution of different mutation strategies to code coverage.
+
+\textbf{Havoc/Splice Strategy:} The havoc stage contributed the majority of new paths, yielding 1213 finds out of approximately 1.07 million executions,
+while splice yielded 0. Havoc excels at exploring dense sequential logic and arithmetic boundaries once a basic code path is unlocked (Figure~\ref{fig:screenshot-fuzz}).
+
+% \textbf{Havoc/Splice Strategy:} The havoc stage contributed the majority of new paths, yielding 1263 new finds out of approximately 1.29 million executions (1263/1.29M). The splice strategy currently yielded 0 finds. Havoc is a highly destructive, multi-pass mutation stage which excels at exploring dense blocks of sequential logic and arithmetic boundaries once a basic code path is unlocked.
+
+\textbf{Dictionary Strategy:} The dictionary stage yielded 8 finds out of roughly 345k executions. Although fewer in absolute terms, these discoveries are structurally significant because random mutation has negligible probability of reconstructing a 4-byte token such as \lstinline|PLTE| by chance. Each dictionary-unlocked path opens a new subtree of the control-flow graph, subsequently amplifying the reach of the havoc stage. 
+
+%In formal language terms, PNG files are constrained by specific syntax, and our dictionary entries act as essential terminal symbols (such as \lstinline|IHDR|) required to trigger state transitions during lexical analysis. Providing this dictionary transforms the fuzzer from blind byte mutation to syntax-aware mutation. (We have mentioned this in 3.1) okok I see
+%The dictionary stage yielded 9 new finds out of roughly 133k total executions. Although this is fewer than 1263 paths above, these dictionary based discoveries are structurally important because the probability of random destructive mutations correctly guessing 4-byte block identifiers like ``PLTE'' is extremely low. The dictionary strategy can effectively bypass these magic byte based bottleneck checks, unlocking new subtrees of the target control flow graph, which facilitates the subsequent discovery of more paths by the destructive mutation strategy.
+
+
 
 
 % -----------------------------------------------------------------
 % Q4 — Campaign Analysis
 % -----------------------------------------------------------------
-\section{Q4 --- Campaign Analysis}
+\section{Campaign Analysis}
 \label{sec:q4}
+We conducted all fuzzing campaigns within a containerized environment on a Linux archlinux 6.18.26-1-lts host equipped with an Intel(R) Core(TM) Ultra 9 185H processor and 32 GB of RAM. We utilized Docker 26.1.4 and AFL++ version afl-fuzz++4.41a. 
 
-% TODO (A): Metrics table (stability, corpus, map density, cycles)
-% TODO (A): Edges curve interpretation with timestamps
-% TODO (A): Saturation argument with evidence
-% Reference: see Figure~\ref{fig:status-inst} and Figure~\ref{fig:edges-inst}
+\subsection{AFL++ status screen}
+
+We extracted the following key metrics from the 30-minute fuzzing campaign (see Figure \ref{fig:screenshot-fuzz}):
+\begin{itemize}
+    \item Stability: 100.00\%. This demonstrates that our harness has no memory leaks or non-deterministic behavior; the same input consistently triggers the same code paths every time.
+    \item Corpus count: 1657. This indicates that the fuzzer successfully generated and saved 1657 valid test cases that triggered new code paths.
+    \item Map density: 10.70\% / 46.16\%. This indicates that the current input hits approximately 10.7\% of the branches, while all previous inputs explored 46.16\% of the available bitmap space.
+    \item Cycles done: 1. This means the fuzzer has completely cycled through and mutated all test cases in the queue at least once.
+\end{itemize}
+
+
+\subsection{Edges Curve}
+According to the code edge coverage graph (see Figure \ref{fig:plot_output-edge}), the edges curve exhibits a typical logarithmic step-growth pattern characteristic of fuzzing. Based on specific timestamps, it can be divided into three stages:
+\begin{itemize}
+    \item The curve shows a near-vertical, sharp increase within the first 100 seconds, with the number of edges skyrocketing from approximately 880 to around 1050. This is because the fuzzer is exploring the shallowest, most easily reachable parsing logic in the target library (e.g., basic file header parsing, reading the first 32 configuration bytes in our harness, etc.).
+    \item The curve rises gently with occasional jumps between 100 and 900 seconds, including near-vertical spikes around 220 and 550 seconds, indicating the fuzzer broke through certain conditional bottlenecks.
+    \item After 900 seconds, significant jumps practically disappear. The slope of the curve flattens considerably,which means the fuzzer reached an almost saturation state.
+\end{itemize}
 
 
 
 % -----------------------------------------------------------------
 % Q5 — Crash Triage
-% -----------------------------------------------------------------
-\section{Q5 --- Crash Triage}
+% -------------------------------------------------------
+\section{Crash Triage}
 \label{sec:q5}
 
 % TODO (B): Full triage workflow: reproduce → minimize → ASan trace
 % TODO (B): Bug type, location, CVE if applicable
 % OR: synthetic bug demonstration + argument
 
+We used a bash script to categorize the crashes according to the bug type in the AFL++ output. The result shows we obtained crashes of:
+\begin{itemize}
+    \item \lstinline|global-buffer-overflow| at \lstinline|png_format_buffer|
+    % , accounts for the majority of the found crashes. This is CVE-2011-2501 and occurred in libpng's error handling.
+    \item  \lstinline|heap-buffer-overflow| at \lstinline|png_read_start_row| 
+    \item  \lstinline|heap-buffer-overflow| at \lstinline|png_read_info|
+    \item \lstinline|memcpy-param-overlap| at \lstinline|png_do_background|
+\end{itemize}
+
+We picked a crash of category \lstinline|heap-buffer-overflow| at \lstinline|png_read_info| and reproduced it with \lstinline|./png_fuzz <path_to_the_crashed_test_case>|. According to the output, the heap buffer overflow happened in \lstinline|png_handle_sCAL()|.
+
+We ran \lstinline|afl-tmin -i <path_to_the_crashed_test_case> -o ./minimized_crash.png -- ./png_fuzz @@| to minimize the test case that caused the crash. However, the minimized testcase from \lstinline|afl-tmin| only triggers the global-buffer-overflow (CVE-2011-2501) which is a shallow bug we do not care about. 
+Therefore, we patched libpng for the global-buffer-overflow vulnerability. Specifically, we changed \lstinline|png_memcpy(buffer+iout, error_message, PNG_MAX_ERROR_TEXT);| into \lstinline|strncpy((char *)(buffer + iout), error_message, 63);| in \lstinline|pngerror.c|. This ensures that we still trigger the \lstinline|png_handle_sCAL()| after minimizing the testcase. Listing \ref{lst:afl-tmin-crash-result} shows the AFL++ output when we reproduce the crash using the minimized testcase.
+
+The bug is located at the line \lstinline|buffer = (png_charp)png_malloc_warn(png_ptr, length + 1);| in \lstinline|pngrutil.c:png_handle_sCAL|. A correct \lstinline|sCAL| chunk has a length of at least 4. However, libpng did not check the length before using it for memory allocation. Therefore, if a malicious \lstinline|sCAL|  chunk is provided, where length is zero, then libpng 1.2.27 allocates a one-byte buffer. In the same function, it subsequently runs \lstinline|ep = buffer + 1;| and accesses \lstinline|ep|, which triggers the heap buffer overflow detection. The corresponding CVE is CVE-2011-2692.
+
 
 
 % -----------------------------------------------------------------
 % Q6 — Attack Surface Analysis
-% --------------------------------------------------------
+% -------------------------------------------------------
 \section{Attack Surface Analysis}
 \label{sec:q6}
-\paragraph{Application 1: Firefox}~\\[0.3em]
-xxx
+\subsection{Application 1: Firefox}
+% Modern web browsers like Firefox automatically parse PNG images that are embedded in webpages, advertisements or even user profile. We have the code source \href{https://github.com/mozilla-firefox/firefox/blob/main/image/decoders/nsPNGDecoder.cpp}{here}.
 
+% \textbf{Attack scenario:} An attacker could craft a malicious PNG file and host it on a webpage and when the victim visits the webpage, the browser will decode the image. If a vulnerability in libpng is triggered during parsing, we could have a browser crash from the victim or a remote code execution within the victim's browser process.
 
-\paragraph{Application 2: ImageMagick}~\\[0.3em]
-ImageMagick is one of the most widely used open-source image processing suites. It is used as the underlying image processing engine by a large number of web frameworks and backend servers (such as PHP, Node.js, etc.), and in its \href{https://github.com/ImageMagick/ImageMagick/blob/main/coders/png.c}{source code} we can check its logic of calling \texttt{libpng}.\\[0.2em]
-\textbf{Attack scenario:} Suppose a social media website allows users to upload profile pictures and uses ImageMagick on the backend to crop and resize these images into uniform thumbnails. An attacker creates and uploads a malicious PNG file containing malformed data chunks. When ImageMagick calls \texttt{libpng} to parse the image, the malformed data triggers a Heap Buffer Overflow. The attacker can then exploit this to overwrite function pointers or return addresses on the heap, thereby hijacking the server process's control flow and executing malicious commands on the target server.\\[0.2em]
-\textbf{Uncovered path:} In ImageMagick's decoder function, like \texttt{ReadPNGImage} (\texttt{coders/png.c}, line 3911), the core processing involves calling the \texttt{ReadOnePNGImage}  (\texttt{coders/png.c}, line 3968). Within this function, in addition to reading pixel data, it calls numerous \texttt{libpng} data retrieval APIs. For instance, it calls \texttt{png\_get\_iCCP} (line 2553) to read the ICC color profile, and \texttt{png\_get\_text} (line 3657) to read the contents of \texttt{tEXt}/\texttt{zTXt}/\texttt{iTXt} chunks. Although our Harness parses these chunks during the \texttt{png\_read\_info()}, it does not call the relevant \texttt{png\_get\_*} APIs to extract this data to the application layer. Certain memory vulnerabilities might be triggered when the application explicitly requests and copies these malformed decompressed texts or color profile information. Our Harness doesn’t simulate the application layer's behavior of extracting this data, so it may miss such bugs.\\
-Similarly, regarding ImageMagick's writing logic in \texttt{WritePNGImage} (\texttt{coders/png.c}, line 11565), the core processing is calling the \texttt{WriteOnePNGImage} (\texttt{coders/png.c}, line 12203). Within this function (line 7977), it calls \texttt{libpng} APIs such as \texttt{png\_create\_write\_struct} (line 9401) and \texttt{png\_write\_info} (line 10908). However, our Harness only conducts read-related testing and does not test the logic involving compression, chunk generation, and writing within \texttt{libpng}. Therefore, bugs occurring during these data output processes (e.g., an integer overflow when calculating chunk lengths during output file generation, leading to a heap overflow) are missed.
+% \textbf{Uncovered path:} Firefox performs progressive and incremental image decoding as image data arrives over the network as we can see in \lstinline|nsPNGDecoder::ReadPNGData| (\texttt{nsPNGDecoder.cpp}, line 414). It calls \lstinline|png_process_data()|, which is not within our fuzzed API functions. The decoder processes arbitrary chunks of incoming data repeatedly, instead of parsing one complete PNG file in a single as we do in our harness. Maintaining the states involves memory management and may result in buffer overflow vulnerabilities. Since we have not fuzzed this path, we cannot detect any bugs that might exist in the browser's PNG decoding.
 
+% Another uncovered path is decoding PNG files with extreme width/height. While we set the limit for image width/height to a small value (4096 for each) considering the fuzzer's performance, Firefox typically accepts larger PNG files. In \lstinline|nsPNGDecoder::InitInternal|, the application calls \lstinline|png_set_user_limits| with \lstinline|MOZ_PNG_MAX_WIDTH| and \lstinline|MOZ_PNG_MAX_HEIGHT|, which are 0x7fffffff (i.e. unlimited). Therefore, malicious PNG files may trigger integer overflow or memory management issues.
+
+Modern web browsers including Firefox automatically decode PNG images embedded in webpages. The relevant decoding logic is in
+\lstinline|nsPNGDecoder.cpp| (\href{https://github.com/mozilla-firefox/firefox/blob/main/image/decoders/nsPNGDecoder.cpp}{source}).
+
+Firefox performs progressive decoding as image data arrives over the network. An attacker can serve a crafted PNG from a malicious webpage, triggering a vulnerability in libpng during parsing and achieving a browser crash or remote code execution within the renderer process.
+
+Two code paths remain uncovered. First, \lstinline|nsPNGDecoder::ReadPNGData| calls \lstinline|png_process_data|, which feeds data chunks
+to the parser incrementally rather than as a complete file. This stateful, chunk-by-chunk interface involves additional memory management and may harbour buffer overflow vulnerabilities our harness cannot reach. Second, \lstinline|nsPNGDecoder::InitInternal| calls \lstinline|png_set_user_limits| with \lstinline|MOZ_PNG_MAX_WIDTH| and \lstinline|MOZ_PNG_MAX_HEIGHT| set to \lstinline|0x7fffffff|, whereas our harness caps dimensions at 4096. Images with extreme dimensions may trigger integer overflows or memory allocation failures our campaign will never exercise.
+
+\subsection{Application 2: ImageMagick}
+% ImageMagick is used as the underlying image processing engine by a large number of web frameworks and backend servers (such as PHP, Node.js, etc.), and in its \href{https://github.com/ImageMagick/ImageMagick/blob/main/coders/png.c}{source code} we can check its logic of calling libpng.
+
+% \textbf{Attack scenario:} Suppose a social media website allows users to upload profile pictures and uses ImageMagick on the backend to make uniform thumbnails. An attacker creates and uploads a malicious PNG file containing malformed data chunks. When ImageMagick calls libpng to parse the image, the malformed data triggers a Heap Buffer Overflow. The attacker can then exploit this to overwrite function pointers or return addresses on the heap, thereby hijacking the server process’s control flow.
+
+% \textbf{Uncovered path:} In ImageMagick's decoder function, like \lstinline|ReadPNGImage| (\texttt{coders/png.c}, line 3911), the core processing involves calling the \lstinline|ReadOnePNGImage| (\texttt{coders/png.c}, line 3968). Within this function, in addition to reading pixel data, it calls numerous libpng data retrieval APIs. For instance, it calls \lstinline|png_get_iCCP| (line 2553) to read the ICC color profile, and \lstinline|png_get_text| (line 3657) to read the contents of \texttt{tEXt}/\texttt{zTXt}/\texttt{iTXt} chunks. Although our Harness parses these chunks during the \lstinline|png_read_info()|, it does not call the relevant \lstinline|png_get_*| APIs to extract this data to the application layer. Certain memory vulnerabilities might be triggered when the application explicitly requests and copies these malformed decompressed texts or color profile information. Our Harness doesn’t simulate the application layer's behavior of extracting this data, so it may miss such bugs.
+
+% Similarly, regarding ImageMagick's writing logic in \lstinline|WritePNGImage| (\texttt{coders/png.c}, line 11565), the core invoke \lstinline|WriteOnePNGImage| (line 12203), Within which it calls libpng APIs such as \lstinline|png_create_write_struct| (line 9401) and \lstinline|png_write_info| (line 10908). However, our Harness only conducts read-related testing, bugs occurring during the data output processes (e.g., an integer overflow when calculating chunk lengths during output file generation, leading to a heap overflow) are missed.
+
+ImageMagick is widely used as the image processing backend in web
+frameworks and server-side applications. Its libpng integration is in \lstinline|coders/png.c| (\href{https://github.com/ImageMagick/ImageMagick/blob/6dc0130dbbde34b13126bc4fe25789f894b9e0c1/coders/png.c}{source}).
+
+A server that accepts user-uploaded profile pictures and resizes them with ImageMagick is a realistic attack surface. A malicious PNG with malformed chunk data can trigger a heap buffer overflow in libpng, potentially allowing an attacker to overwrite heap metadata and hijack the control flow.
+
+Two code paths are not covered. First, \lstinline|ReadOnePNGImage| (line 3968, called from \lstinline|ReadPNGImage| at line 3911) invokes \lstinline|png_get_iCCP| (line 2533) and \lstinline|png_get_text|
+(line 3657) to extract ICC color profiles and text chunks to the
+application layer. Our harness calls \lstinline|png_read_info| but never retrieves this data, so memory vulnerabilities triggered during the copy of malformed decompressed content remain undetected. Second, \lstinline|WriteOnePNGImage| (line 12203, called from \lstinline|WritePNGImage| at line 11565) exercises the encoder pipeline through \lstinline|png_create_write_struct| (line 9401) and \lstinline|png_write_info| (line 10908). Our read-only harness never invokes the encoder, leaving bugs such as integer overflows in chunk length calculations during output generation entirely uncovered.
 
 
 
 % -----------------------------------------------------------------
 % Q7 — Binary-Only Fuzzing with QEMU Mode
-% -----------------------------------------------------------------
-\section{Q7 --- Binary-Only Fuzzing (QEMU)}
+% -----------------------------------------------
+\section{Binary-Only Fuzzing (QEMU)}
 \label{sec:q7}
+Table~\ref{tab:qemu-compare} compares the two 30-minute campaigns on three axes. Both QEMU and instrumented are run without ASan (see Figures~\ref{fig:screenshot-qemu} and~\ref{fig:plot_output_qemu-edges}). 
 
-% TODO (C): Side-by-side table: exec speed, edges, corpus
-% TODO (C): Explanation of QEMU coverage collection mechanism
-% Reference: see Figure~\ref{fig:status-qemu} and Figure~\ref{fig:edges-qemu}
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lrr}
+\toprule
+Metric & Instrumented & QEMU \\
+\midrule
+Exec speed (avg) & 6101 exec/s & 1736 exec/s \\
+Total executions & 10.98M & 3.13M \\
+Edges found & 1555 / 3005 & 3848 / 65536 \\
+Map density & 51.75\% & 5.87\% \\
+Corpus count & 2273 & 2402 \\
+\bottomrule
+\end{tabular}
+\caption{Instrumented (no ASan) vs QEMU campaign comparison (30 min each).}
+\label{tab:qemu-compare}
+\end{table}
+
+% The QEMU run (Figure \ref{fig:screenshot-qemu}) achieved higher execution speed with an average of 1736 exec/s versus 811 exec/s for the instrumented execution (Figure \ref{fig:screenshot-fuzz}). This is mainly due to Asan which introduces significant runtime overhead due to memory safety checks and shadow memory operations. As a result, the instrumented campaign executes fewer test cases within the same time budget (1.46M vs 3.13M executions).
+
+% Consequently, QEMU achieves higher absolute coverage growth, discovering 3848 new edges and a larger corpus of 2402 inputs, compared to 1389 edges and 1657 inputs for the instrumented campaign. However, when normalized per execution, the instrumented version shows slightly better efficiency in terms of corpus and edge discovery, due to more precise compile-time instrumentation.
+
+% Coverage in AFL++ differs between the two modes: compile-time instrumentation inserts edge tracking directly into the binary at build time, while QEMU mode performs dynamic binary translation and injects coverage hooks during emulation. Although QEMU has higher execution overhead in general, it avoids ASAN instrumentation costs, which explains its higher throughput in this experiment.
+
+The QEMU campaign achieves lower throughput due to the overhead of dynamic binary translation, while the instrumented campaign inserts lightweight edge coverage check during compile time. However, despite lower execution speed, the QEMU campaign discovered more edges and has a larger corpus. This is likely due to how coverage is collected and represented. Compile-time instrumentation assigns a stable ID to every control-flow edge at build time, recording hits in a bitmap sized to the actual edge count. QEMU instead translates each basic block on first encounter and injects coverage hooks at that point, recording hits in a fixed 65536-slot bitmap irrespective of the binary's true edge count. The map density figures therefore offer the more meaningful comparison. The instrumented campaign saturated a larger fraction of its known edges, while the QEMU bitmap's inflated size keeps its density low even as absolute slot hits accumulate. Within the same time budget, compile-time instrumentation yields deeper proportional coverage of the target.
+
+
+
 
 
 
 % -----------------------------------------------------------------
 % Q8 — Instrumentation Depth and Performance
-% -----------------------------------------------------------------
-\section{Q8 --- Instrumentation Depth and Performance}
+% ---------------------------------------------------
+\section{Instrumentation Depth and Performance}
 \label{sec:q8}
+% \liu{check if the expression of this section is correct, especially the number}
 
-% TODO (D): Edge count: library-only vs harness binary, explain diff
-% TODO (D): Map density vs total edges, explain unreached edges
-% TODO (D): 3-config exec speed table + explanations
+% The difference between the reported numbers arises from the distinction between full library instrumentation, final linked binary instrumentation, and actual reachable execution paths. The full libpng build instruments thousands of edges (4326) because it includes all source files and functionality. The final harness binary shows fewer instrumented edges (3009) because the linker removes unused library code and only includes functions reachable from the harness. The campaign’s map density (around 46\%) is significantly lower than the total instrumented edges because AFL can only execute paths that are reachable through valid inputs and the given harness. Many instrumented edges correspond to rare parsing states, optional PNG features, or error-handling branches that are not triggered by the seed corpus. As a result, static instrumentation reflects the potential control-flow graph, while runtime coverage reflects only the subset of that graph that is reachable under the current fuzzing setup.
 
+% The no-Asan mode achieved the highest throughput at 6102 execs/sec because it only incurs AFL’s lightweight instrumentation overhead and avoids both sanitization checks and repeated process creation costs due to the forkserver model. When Asan was enabled in fork mode, performance dropped significantly to 810 execs/sec. This slowdown is primarily due to ASan’s runtime overhead, which introduces shadow memory lookups, redzone checks, and heap/stack instrumentation for every memory access, combined with the additional cost of forking and reinitializing the ASan runtime for each test case. Finally, enabling ASan with persistent mode improved performance to 2935 execs/sec by eliminating repeated fork() calls and reducing process creation overhead through in-process execution loops. However, execution remains slower than the baseline because ASan’s memory safety checks are still active on every input, meaning the sanitizer overhead dominates even when fork-related costs are removed.
+
+
+The compile log reports 70 instrumented locations in \lstinline|harness.c|, while AFL++ reports a target map size of 3009 for the final \lstinline|png_fuzz| binary, placing the library's contribution at approximately 2939 edges. The gap reflects static linking, where only library functions reachable from the harness entry point are retained and all unreferenced encoder and platform-specific code is eliminated by the linker.
+
+
+The campaign's 46.16\% map density indicates that roughly half the instrumented edges were never reached. The unreached portion corresponds to error recovery branches, optional ancillary chunk handlers, and parsing states that require input conditions beyond what the current corpus and mutation budget can generate.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lrr}
+\toprule
+Configuration & Exec speed & Total execs \\
+\midrule
+No sanitizer, fork mode   & 6102 exec/s & 10.98M \\
+ASan, fork mode           &  810 exec/s &  1.46M \\
+ASan, persistent mode     & 2935 exec/s &  5.28M \\
+\bottomrule
+\end{tabular}
+\caption{Exec speed under three instrumentation configurations (30 min each).}
+\label{tab:exec-speed}
+\end{table}
+
+As Table~\ref{tab:exec-speed} shows, removing ASan yields the highest throughput, confirming that shadow-memory overhead rather than fork cost is the dominant bottleneck. Persistent mode recovers much of that loss by eliminating repeated \lstinline|fork| calls, though it falls short of the sanitizer-free baseline for two reasons. ASan's per-access checks remain active regardless of fork elimination, and \lstinline|my_fuzz_transform_callback| modifies row data in place, leaving residual state across loop iterations. AFL++ flagged this as calibration instability during startup, which limits its ability to prioritise favoured corpus entries and partially offsets the throughput gain from persistent mode.
 
 
 % =================================================================
 %                         APPENDIX
-% =================================================================
+% ================================================
 \appendix
 
 \section{Figures and Screenshots}
 \label{app:figures}
 
+All screenshots were captured at the end of the respective 30-minute campaign. Edge discovery plots were generated with \lstinline|afl-plot| from the \lstinline|plot_data| file in each findings directory.
+
 % --- Instrumented campaign ---
-\begin{figure}[h]
+\begin{figure}[htbp]
 \centering
-% \includegraphics[width=\columnwidth]{status_screen_instrumented.png}
-\fbox{\parbox{0.9\columnwidth}{\centering\vspace{2em}
-  \textit{[A: paste instrumented status screen screenshot here]}
-  \vspace{2em}}}
-\caption{AFL++ status screen — instrumented campaign (30 min).}
-\label{fig:status-inst}
+\includegraphics[width=\columnwidth]{figures/screenshot-fuzz.png}
+\caption{AFL++ status screen for the instrumented campaign.}
+\label{fig:screenshot-fuzz}
 \end{figure}
 
-\begin{figure}[h]
+\begin{figure}[htbp]
 \centering
-% \includegraphics[width=\columnwidth]{plot_output/edges.png}
-\fbox{\parbox{0.9\columnwidth}{\centering\vspace{2em}
-  \textit{[A: paste edges.png from plot\_output/ here]}
-  \vspace{2em}}}
-\caption{Edge discovery over time — instrumented campaign.}
-\label{fig:edges-inst}
+\includegraphics[width=\columnwidth]{figures/plot_output-edges.png}
+\caption{Edge discovery for the instrumented campaign.}
+\label{fig:plot_output-edge}
 \end{figure}
+
+
 
 % --- QEMU campaign ---
-\begin{figure}[h]
+\begin{figure}[htbp]
 \centering
-% \includegraphics[width=\columnwidth]{status_screen_qemu.png}
-\fbox{\parbox{0.9\columnwidth}{\centering\vspace{2em}
-  \textit{[C: paste QEMU status screen screenshot here]}
-  \vspace{2em}}}
-\caption{AFL++ status screen — QEMU campaign (30 min).}
-\label{fig:status-qemu}
+\includegraphics[width=\columnwidth]{figures/screenshot-qemu.png}
+\caption{AFL++ status screen for the QEMU campaign.}
+\label{fig:screenshot-qemu}
 \end{figure}
 
-\begin{figure}[h]
+\begin{figure}[htbp]
 \centering
-% \includegraphics[width=\columnwidth]{plot_output_qemu/edges.png}
-\fbox{\parbox{0.9\columnwidth}{\centering\vspace{2em}
-  \textit{[C: paste edges.png from plot\_output\_qemu/ here]}
-  \vspace{2em}}}
-\caption{Edge discovery over time — QEMU campaign.}
-\label{fig:edges-qemu}
+\includegraphics[width=\columnwidth]{figures/plot_output_qemu-edges.png}
+\caption{Edge discovery for the QEMU campaign.}
+\label{fig:plot_output_qemu-edges}
 \end{figure}
+
+
+
 
 % --- ASan trace ---
-\begin{figure}[h]
-\centering
-\fbox{\parbox{0.9\columnwidth}{\centering\vspace{2em}
-  \textit{[B: paste ASan stack trace output here]}
-  \vspace{2em}}}
-\caption{ASan stack trace for the triaged crash.}
-\label{fig:asan-trace}
-\end{figure}
+% \begin{figure}[htbp]
+% \centering
+% \fbox{\parbox{0.9\columnwidth}{\centering\vspace{2em}
+%   \textit{[paste ASan stack trace output here]}
+%   \vspace{2em}}}
+% \caption{ASan stack trace for the triaged crash.}
+% \label{fig:asan-trace}
+% \end{figure}
 
 
 
 \section{Code Listings}
 \label{app:code}
 
-\begin{figure*}[h]
-\begin{lstlisting}[caption={Fuzzing harness (src/harness.c) — excerpt},
-                   label={lst:harness}]
-/* TODO: paste key sections of harness.c here */
-\end{lstlisting}
-\end{figure*}
-
+Listing~\ref{lst:afl-tmin-crash-result} shows the full ASan report obtained by running the minimized crash input through the instrumented harness. The trace confirms a heap-buffer-overflow in \lstinline|png_handle_sCAL| at \lstinline|pngrutil.c:1750|, corresponding to CVE-2011-2692.
 
 % \begin{figure*}[h]
-% \begin{lstlisting}[caption={Patch (changes.patch)},
+% \begin{lstlisting}[caption={Fuzzing harness (src/harness.c) — excerpt},
 %                    label={lst:harness}]
-% --- libpng-1.2.27/pngrutil.c	2008-04-30 12:23:13.000000000 +0200
-% +++ libpng-1.2.27_new/pngrutil.c	2026-05-09 19:02:13.271050837 +0200
-% @@ -165,7 +165,10 @@
-%     if (need_crc)
-%     {
-%        crc = png_get_uint_32(crc_bytes);
-% -      return ((int)(crc != png_ptr->crc));
-% +      if (crc != png_ptr->crc)
-% +         fprintf(stderr, "NOTE: CRC in the file is 0x%08x, change to 0x%08x\n", crc, png_ptr->crc);
-% +
-% +      return ((int)(1 != 1));
-%     }
-%     else
-%        return (0);
+% /* TODO: paste key sections of harness.c here */
 % \end{lstlisting}
 % \end{figure*}
 
+\begin{lstlisting}[language=Bash,caption={ASan stack trace for the minimized crash input (CVE-2011-2692).}, label={lst:afl-tmin-crash-result}]
+[AFL++ a8cebb2c0cea] /work # ./png_fuzz ./minimized_crash.png 
+NOTE: CRC in the file is 0x30303030, change to 0xb8d050b4
+NOTE: CRC in the file is 0x30303030, change to 0xa6fa7b23
+NOTE: CRC in the file is 0x30303030, change to 0x58e46a74
+NOTE: CRC in the file is 0x30303030, change to 0xbc1a9008
+================================================
+==3735109==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x502000000011 at pc 0x5570ab4d044f bp 0x7ffc8c30a6d0 sp 0x7ffc8c30a6c8
+READ of size 1 at 0x502000000011 thread T0
+    #0 0x5570ab4d044e in png_handle_sCAL /work/libpng-1.2.27/pngrutil.c:1750:8
+    #1 0x5570ab496fc2 in png_read_info /work/libpng-1.2.27/pngread.c:491:10
+    #2 0x5570ab487f16 in main /work/src/harness.c:158:5
+    #3 0x7fb76b5b81c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #4 0x7fb76b5b828a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #5 0x5570ab3a54d4 in _start (/work/png_fuzz+0x314d4) (BuildId: 953a1275756208f08d04983aba76adb89b1712a9)
+
+0x502000000011 is located 0 bytes after 1-byte region [0x502000000010,0x502000000011)
+allocated by thread T0 here:
+    #0 0x5570ab445303 in malloc (/work/png_fuzz+0xd1303) (BuildId: 953a1275756208f08d04983aba76adb89b1712a9)
+    #1 0x5570ab4c3d6b in png_malloc_default /work/libpng-1.2.27/pngmem.c:483:10
+    #2 0x5570ab4c3d6b in png_malloc /work/libpng-1.2.27/pngmem.c:440:15
+    #3 0x5570ab4c3d6b in png_malloc_warn /work/libpng-1.2.27/pngmem.c:549:21
+    #4 0x5570ab4cffec in png_handle_sCAL /work/libpng-1.2.27/pngrutil.c:1729:24
+    #5 0x5570ab496fc2 in png_read_info /work/libpng-1.2.27/pngread.c:491:10
+    #6 0x5570ab487f16 in main /work/src/harness.c:158:5
+    #7 0x7fb76b5b81c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #8 0x7fb76b5b828a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #9 0x5570ab3a54d4 in _start (/work/png_fuzz+0x314d4) (BuildId: 953a1275756208f08d04983aba76adb89b1712a9)
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow /work/libpng-1.2.27/pngrutil.c:1750:8 in png_handle_sCAL
+Shadow bytes around the buggy address:
+  0x501ffffffd80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x501ffffffe00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x501ffffffe80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x501fffffff00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x501fffffff80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+=>0x502000000000: fa fa[01]fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000080: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000100: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000180: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000200: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000280: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==3735109==ABORTING
+\end{lstlisting}
 
 
 \end{document}
